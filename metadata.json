@@ -1,0 +1,6 @@
+{
+  "name": "SPM Store Sistema Fiscal & Auditoria NFs",
+  "description": "Sistema de extração automática de dados de NF/DANFE em PDF para Excel, Google Sheets, Power BI e Dashboard em tempo real com gestão de usuários e alertas.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
