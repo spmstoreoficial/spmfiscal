@@ -1,6 +1,7 @@
 version: '3.8'
 
 services:
+  # 1. Aplicação SPM Store Sistema Fiscal
   spm-fiscal:
     image: spm-fiscal-app:latest
     build:
@@ -16,6 +17,9 @@ services:
       - JWT_SECRET=${JWT_SECRET:-spm_store_chave_secreta_jwt_producao_2026}
     volumes:
       - spm_notas_fiscais:/app/Notas_Fiscais
+      - spm_data:/app/data
+    networks:
+      - spm_rede
     deploy:
       replicas: 1
       restart_policy:
@@ -29,7 +33,23 @@ services:
       retries: 3
       start_period: 20s
 
+  # 2. Conector Cloudflare Tunnel (HTTPS e Domínio Automático)
+  cloudflared:
+    image: cloudflare/cloudflared:latest
+    container_name: spm-cloudflare-tunnel
+    restart: unless-stopped
+    command: tunnel --no-autoupdate run --token ${CLOUDFLARE_TUNNEL_TOKEN:-red-field-3bb4}
+    networks:
+      - spm_rede
+    depends_on:
+      - spm-fiscal
+
 volumes:
   spm_notas_fiscais:
     driver: local
+  spm_data:
+    driver: local
 
+networks:
+  spm_rede:
+    driver: bridge

@@ -68,7 +68,37 @@ Sistema de Extração, Gestão e Auditoria de Notas Fiscais (DANFE / PDF) com Su
 
 ---
 
+## 🐳 Como Executar com Docker & Docker Compose
+
+1. **Construir e iniciar o container**:
+   ```cmd
+   docker compose up -d --build
+   ```
+
+2. **Acessar**:
+   - `http://localhost:3000`
+
+3. **Parar o container**:
+   ```cmd
+   docker compose down
+   ```
+
+---
+
+## 💾 Persistência de Dados
+
+Todos os registros de notas fiscais, usuários cadastrados, configurações e regras de alerta são salvos automaticamente na pasta:
+- `data/invoices.json`
+- `data/users.json`
+- `data/logs.json`
+- `data/alerts.json`
+- `data/settings.json`
+
+Mesmo se o servidor ou o computador for reiniciado, **nenhum dado será perdido**.
+
+---
+
 ## 🔐 Contas de Acesso Pré-cadastradas
 - **ADMIN**: `josegaldino@hotmail.com.br` | Senha: `admin123`
-- **GERENTE**: `gerente@empresa.com` | Senha: `admin123`
-- **AUDITOR**: `auditor@empresa.com` | Senha: `admin123`
+- **GERENTE**: `gerente@empresa.com` | Senha: `gerente123`
+- **AUDITOR**: `auditor@empresa.com` | Senha: `auditor123`

@@ -35,6 +35,7 @@ async function extractTextFromPdfBuffer(dataBuffer: Buffer): Promise<string> {
 
   throw new Error('Não foi possível extrair o texto do arquivo PDF.');
 }
+
 import { 
   Invoice, 
   User, 
@@ -47,7 +48,7 @@ import {
 } from './src/types';
 
 const app = express();
-const PORT = 3000;
+const PORT = Number(process.env.PORT) || 3000;
 const JWT_SECRET = process.env.JWT_SECRET || 'secur3-spm-store-jwt-secret-2026';
 
 app.use(express.json({ limit: '50mb' }));
@@ -65,6 +66,36 @@ if (!fs.existsSync(notasFiscaisDir)) {
   fs.mkdirSync(notasFiscaisDir, { recursive: true });
 }
 
+// Setup Persistent Data directory
+const dataDir = path.join(process.cwd(), 'data');
+if (!fs.existsSync(dataDir)) {
+  fs.mkdirSync(dataDir, { recursive: true });
+}
+
+// ================= PERSISTENCE HELPERS =================
+function loadJson<T>(filename: string, fallback: T): T {
+  const filePath = path.join(dataDir, filename);
+  try {
+    if (fs.existsSync(filePath)) {
+      const content = fs.readFileSync(filePath, 'utf-8');
+      return JSON.parse(content);
+    }
+  } catch (e) {
+    console.warn(`[Storage] Erro ao carregar ${filename}, usando dados padrão:`, e);
+  }
+  saveJson(filename, fallback);
+  return fallback;
+}
+
+function saveJson<T>(filename: string, data: T): void {
+  const filePath = path.join(dataDir, filename);
+  try {
+    fs.writeFileSync(filePath, JSON.stringify(data, null, 2), 'utf-8');
+  } catch (e) {
+    console.error(`[Storage] Erro ao salvar ${filename}:`, e);
+  }
+}
+
 const storage = multer.diskStorage({
   destination: (_req, _file, cb) => cb(null, uploadsDir),
   filename: (_req, file, cb) => {
@@ -75,7 +106,7 @@ const storage = multer.diskStorage({
 const upload = multer({ storage });
 
 // ================= INITIAL DATABASE SEED =================
-let users: User[] = [
+const defaultUsers: User[] = [
   {
     id: 'u-admin-1',
     name: 'José Galdino (Administrador)',
@@ -105,15 +136,13 @@ let users: User[] = [
   }
 ];
 
-// User passwords map (hashed)
-const userPasswords: Record<string, string> = {
+const defaultUserPasswords: Record<string, string> = {
   'josegaldino@hotmail.com.br': bcrypt.hashSync('admin123', 8),
   'gerente@empresa.com': bcrypt.hashSync('gerente123', 8),
   'auditor@empresa.com': bcrypt.hashSync('auditor123', 8)
 };
 
-// Seed de dados no formato estrito do script JavaScript do SPM Store
-let invoices: Invoice[] = [
+const defaultInvoices: Invoice[] = [
   {
     id: 'spm-1001',
     nome: 'Comércio e Distribuição Silva Ltda',
@@ -208,7 +237,7 @@ let invoices: Invoice[] = [
   }
 ];
 
-let logs: LogEntry[] = [
+const defaultLogs: LogEntry[] = [
   {
     id: 'log-1',
     timestamp: new Date().toISOString(),
@@ -216,13 +245,13 @@ let logs: LogEntry[] = [
     userName: 'José Galdino (Administrador)',
     action: 'Inicialização do Motor JavaScript',
     category: 'SYSTEM',
-    details: 'Motor JavaScript SPM Store ativado com sucesso para extração dos 17 campos.',
+    details: 'Motor JavaScript SPM Store ativado com sucesso com persistência em disco.',
     ip: '127.0.0.1',
     severity: 'success'
   }
 ];
 
-let alertRules: AlertRule[] = [
+const defaultAlertRules: AlertRule[] = [
   {
     id: 'rule-1',
     name: 'Nota Fiscal com Valor Acima de R$ 5.000',
@@ -250,7 +279,7 @@ let alertRules: AlertRule[] = [
   }
 ];
 
-let gsheetsConfig: GSheetsConfig = {
+const defaultGSheetsConfig: GSheetsConfig = {
   spreadsheetId: '1BxiMVs0XRA5nFMdKvBdBZjgmUUqptlbs74OgvE2upms',
   sheetName: 'Notas Fiscais',
   autoSync: true,
@@ -259,7 +288,7 @@ let gsheetsConfig: GSheetsConfig = {
   webhookUrl: 'https://script.google.com/macros/s/AKfycbx_fiscal_sync_webhook/exec'
 };
 
-let powerBiConfig: PowerBiConfig = {
+const defaultPowerBiConfig: PowerBiConfig = {
   enabled: true,
   refreshIntervalMinutes: 15,
   lastRefresh: new Date().toISOString(),
@@ -267,7 +296,7 @@ let powerBiConfig: PowerBiConfig = {
   feedUrl: '/api/powerbi/feed'
 };
 
-let systemSettings: SystemSettings = {
+const defaultSystemSettings: SystemSettings = {
   smtpHost: 'smtp.gmail.com',
   smtpPort: 587,
   smtpUser: 'alertas.fiscais@spmstore.com.br',
@@ -278,6 +307,40 @@ let systemSettings: SystemSettings = {
   useGeminiOcrFallback: true,
   vpsMode: false
 };
+
+// ================= LOAD STORED STATE =================
+let users: User[] = loadJson('users.json', defaultUsers);
+let userPasswords: Record<string, string> = loadJson('userPasswords.json', defaultUserPasswords);
+let invoices: Invoice[] = loadJson('invoices.json', defaultInvoices);
+let logs: LogEntry[] = loadJson('logs.json', defaultLogs);
+let alertRules: AlertRule[] = loadJson('alerts.json', defaultAlertRules);
+let gsheetsConfig: GSheetsConfig = loadJson('gsheets.json', defaultGSheetsConfig);
+let powerBiConfig: PowerBiConfig = loadJson('powerbi.json', defaultPowerBiConfig);
+let systemSettings: SystemSettings = loadJson('settings.json', defaultSystemSettings);
+
+const saveUsers = () => saveJson('users.json', users);
+const saveUserPasswords = () => saveJson('userPasswords.json', userPasswords);
+const saveInvoices = () => saveJson('invoices.json', invoices);
+const saveLogs = () => saveJson('logs.json', logs);
+const saveAlerts = () => saveJson('alerts.json', alertRules);
+const saveGSheets = () => saveJson('gsheets.json', gsheetsConfig);
+const savePowerBi = () => saveJson('powerbi.json', powerBiConfig);
+const saveSettings = () => saveJson('settings.json', systemSettings);
+
+// Helper to check invoice duplicates
+function isDuplicateInvoice(existing: Invoice, newItem: Invoice): boolean {
+  if (existing.fatura && newItem.fatura && existing.fatura !== 'Não encontrada' && newItem.fatura !== 'Não encontrada') {
+    const docA = (existing.documento || '').replace(/\D/g, '');
+    const docB = (newItem.documento || '').replace(/\D/g, '');
+    const fatA = existing.fatura.trim();
+    const fatB = newItem.fatura.trim();
+    const codA = (existing.codigo || '').trim().toLowerCase();
+    const codB = (newItem.codigo || '').trim().toLowerCase();
+
+    return fatA === fatB && (docA === docB || docA === '' || docB === '') && codA === codB;
+  }
+  return false;
+}
 
 // Logging helper
 function addLog(
@@ -302,6 +365,7 @@ function addLog(
     severity
   });
   if (logs.length > 500) logs.pop();
+  saveLogs();
 }
 
 // Helper to parse Brazilian number string
@@ -342,6 +406,18 @@ function authenticateToken(req: Request, res: Response, next: () => void) {
 
 // ================= API ENDPOINTS =================
 
+// 0. HEALTH CHECK
+app.get('/api/health', (_req, res) => {
+  res.json({
+    status: 'ok',
+    system: 'SPM Store Sistema Fiscal & Auditoria NFs',
+    uptimeSeconds: Math.floor(process.uptime()),
+    timestamp: new Date().toISOString(),
+    invoicesCount: invoices.length,
+    usersCount: users.length
+  });
+});
+
 // 1. AUTH API
 app.post('/api/auth/login', (req, res) => {
   const { email, password } = req.body;
@@ -360,6 +436,8 @@ app.post('/api/auth/login', (req, res) => {
   }
 
   user.lastLogin = new Date().toISOString();
+  saveUsers();
+
   const token = jwt.sign({ id: user.id, email: user.email, name: user.name, role: user.role }, JWT_SECRET, { expiresIn: '7d' });
 
   addLog(user.id, user.name, 'Login Realizado', 'AUTH', `Usuário ${user.name} autenticou-se com sucesso.`, 'success', req);
@@ -397,6 +475,8 @@ app.post('/api/auth/users', authenticateToken, (req, res) => {
 
   users.push(newUser);
   userPasswords[email] = bcrypt.hashSync(password || 'senha123', 8);
+  saveUsers();
+  saveUserPasswords();
 
   const currentUser = (req as any).user;
   addLog(currentUser.id, currentUser.name, 'Criação de Usuário', 'SECURITY', `Novo usuário ${email} criado com perfil ${role}`, 'info', req);
@@ -417,7 +497,10 @@ app.put('/api/auth/users/:id', authenticateToken, (req, res) => {
   if (department !== undefined) user.department = department;
   if (password) {
     userPasswords[user.email] = bcrypt.hashSync(password, 8);
+    saveUserPasswords();
   }
+
+  saveUsers();
 
   const currentUser = (req as any).user;
   addLog(currentUser.id, currentUser.name, 'Atualização de Usuário', 'SECURITY', `Usuário ${user.email} atualizado`, 'info', req);
@@ -435,6 +518,8 @@ app.delete('/api/auth/users/:id', authenticateToken, (req, res) => {
   const deletedUser = users[userIndex];
   users.splice(userIndex, 1);
   delete userPasswords[deletedUser.email];
+  saveUsers();
+  saveUserPasswords();
 
   const currentUser = (req as any).user;
   addLog(currentUser.id, currentUser.name, 'Exclusão de Usuário', 'SECURITY', `Usuário ${deletedUser.email} removido`, 'warning', req);
@@ -486,6 +571,7 @@ app.post('/api/invoices', authenticateToken, (req, res) => {
   };
 
   invoices.unshift(newInvoice);
+  saveInvoices();
 
   const user = (req as any).user;
   addLog(user.id, user.name, 'Cadastro de Nota Fiscal', 'UPLOAD', `Registro para ${newInvoice.nome} adicionado manualmente`, 'info', req);
@@ -499,6 +585,7 @@ app.put('/api/invoices/:id', authenticateToken, (req, res) => {
   if (index === -1) return res.status(404).json({ error: 'Registro fiscal não encontrado.' });
 
   invoices[index] = { ...invoices[index], ...req.body };
+  saveInvoices();
 
   const user = (req as any).user;
   addLog(user.id, user.name, 'Edição de Nota Fiscal', 'UPLOAD', `Dados do registro #${id} atualizados`, 'info', req);
@@ -512,6 +599,7 @@ app.delete('/api/invoices/:id', authenticateToken, (req, res) => {
   if (index === -1) return res.status(404).json({ error: 'Registro não encontrado.' });
 
   const deleted = invoices.splice(index, 1)[0];
+  saveInvoices();
 
   const user = (req as any).user;
   addLog(user.id, user.name, 'Exclusão de Nota Fiscal', 'UPLOAD', `Registro #${deleted.id} de ${deleted.nome} excluído`, 'warning', req);
@@ -526,6 +614,7 @@ app.post('/api/invoices/bulk-delete', authenticateToken, (req, res) => {
   }
 
   invoices = invoices.filter(i => !ids.includes(i.id));
+  saveInvoices();
 
   const user = (req as any).user;
   addLog(user.id, user.name, 'Exclusão em Lote', 'UPLOAD', `${ids.length} registros fiscais excluídos`, 'warning', req);
@@ -536,6 +625,7 @@ app.post('/api/invoices/bulk-delete', authenticateToken, (req, res) => {
 app.post('/api/invoices/reset', authenticateToken, (req, res) => {
   const previousCount = invoices.length;
   invoices = [];
+  saveInvoices();
 
   const user = (req as any).user;
   addLog(user.id, user.name, 'Limpeza Total do Banco de Dados', 'UPLOAD', `O banco de dados foi zerado (${previousCount} registros removidos).`, 'warning', req);
@@ -576,8 +666,18 @@ app.post('/api/extract/pdf', upload.array('files', 100), async (req, res) => {
       }
     }
 
-    if (extractedInvoices.length > 0) {
-      invoices.unshift(...extractedInvoices);
+    // Filter duplicates and append
+    const newItemsToAdd: Invoice[] = [];
+    for (const item of extractedInvoices) {
+      const isDup = invoices.some(existing => isDuplicateInvoice(existing, item));
+      if (!isDup) {
+        newItemsToAdd.push(item);
+      }
+    }
+
+    if (newItemsToAdd.length > 0) {
+      invoices.unshift(...newItemsToAdd);
+      saveInvoices();
     }
 
     const user = (req as any).user || users[0];
@@ -586,7 +686,7 @@ app.post('/api/extract/pdf', upload.array('files', 100), async (req, res) => {
       user.name, 
       'Processamento de PDFs Concluído', 
       'UPLOAD', 
-      `Extraídos ${extractedInvoices.length} registros de ${files.length} arquivo(s) PDF via motor JavaScript. ${errors.length} erro(s).`, 
+      `Extraídos ${extractedInvoices.length} registros (${newItemsToAdd.length} novos inseridos) de ${files.length} arquivo(s) PDF. ${errors.length} erro(s).`, 
       errors.length > 0 ? 'warning' : 'success', 
       req
     );
@@ -594,6 +694,7 @@ app.post('/api/extract/pdf', upload.array('files', 100), async (req, res) => {
     res.json({
       success: true,
       extractedCount: extractedInvoices.length,
+      newInsertedCount: newItemsToAdd.length,
       extractedInvoices,
       errors
     });
@@ -628,15 +729,25 @@ app.post('/api/scan-local-folder', authenticateToken, async (req, res) => {
       }
     }
 
-    if (newItems.length > 0) {
-      invoices.unshift(...newItems);
+    // Deduplicate before saving
+    const newUniqueItems: Invoice[] = [];
+    for (const item of newItems) {
+      const isDup = invoices.some(existing => isDuplicateInvoice(existing, item));
+      if (!isDup) {
+        newUniqueItems.push(item);
+      }
+    }
+
+    if (newUniqueItems.length > 0) {
+      invoices.unshift(...newUniqueItems);
+      saveInvoices();
     }
 
     res.json({
       success: true,
-      count: extractedCount,
+      count: newUniqueItems.length,
       totalPdfs: pdfFiles.length,
-      extracted: newItems
+      extracted: newUniqueItems
     });
   } catch (err: any) {
     res.status(500).json({ error: err.message || 'Erro ao escanear pasta local' });
@@ -688,6 +799,7 @@ app.post('/api/extract/excel', upload.single('file'), async (req, res) => {
 
     if (newInvoices.length > 0) {
       invoices.unshift(...newInvoices);
+      saveInvoices();
     }
 
     if (fs.existsSync(file.path)) fs.unlinkSync(file.path);
@@ -797,7 +909,7 @@ app.get('/api/stats', (req, res) => {
     filtered = filtered.filter(i => 
       i.nome.toLowerCase().includes(q) || 
       i.documento.includes(q) || 
-      i.codigo.toLowerCase().includes(q) ||
+      i.codigo.toLowerCase().includes(q) || 
       i.descricao.toLowerCase().includes(q)
     );
   }
@@ -886,6 +998,7 @@ app.get('/api/powerbi/feed', (_req, res) => {
 app.post('/api/gsheets/sync', authenticateToken, (_req, res) => {
   gsheetsConfig.lastSync = new Date().toISOString();
   gsheetsConfig.status = 'CONNECTED';
+  saveGSheets();
   res.json({
     success: true,
     syncedCount: invoices.length,
@@ -899,6 +1012,7 @@ app.get('/api/gsheets/config', authenticateToken, (_req, res) => {
 
 app.post('/api/gsheets/config', authenticateToken, (req, res) => {
   gsheetsConfig = { ...gsheetsConfig, ...req.body };
+  saveGSheets();
   res.json({ config: gsheetsConfig });
 });
 
@@ -913,6 +1027,7 @@ app.post('/api/alerts', authenticateToken, (req, res) => {
     id: 'rule-' + Date.now()
   };
   alertRules.push(newRule);
+  saveAlerts();
   res.status(201).json({ alert: newRule });
 });
 
@@ -921,12 +1036,14 @@ app.put('/api/alerts/:id', authenticateToken, (req, res) => {
   const idx = alertRules.findIndex(a => a.id === id);
   if (idx === -1) return res.status(404).json({ error: 'Regra não encontrada.' });
   alertRules[idx] = { ...alertRules[idx], ...req.body };
+  saveAlerts();
   res.json({ alert: alertRules[idx] });
 });
 
 app.delete('/api/alerts/:id', authenticateToken, (req, res) => {
   const { id } = req.params;
   alertRules = alertRules.filter(a => a.id !== id);
+  saveAlerts();
   res.json({ message: 'Regra removida com sucesso.' });
 });
 
@@ -946,6 +1063,7 @@ app.get('/api/logs', authenticateToken, (_req, res) => {
 
 app.delete('/api/logs', authenticateToken, (_req, res) => {
   logs = [];
+  saveLogs();
   res.json({ message: 'Logs limpos com sucesso.' });
 });
 
@@ -959,6 +1077,7 @@ app.get('/api/settings', authenticateToken, (_req, res) => {
 
 app.post('/api/settings', authenticateToken, (req, res) => {
   systemSettings = { ...systemSettings, ...req.body };
+  saveSettings();
   res.json({ settings: systemSettings });
 });
 
