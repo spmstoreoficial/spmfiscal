@@ -1,0 +1,13 @@
+[
+  {
+    "id": "log-1",
+    "timestamp": "2026-08-23T18:05:04.145Z",
+    "userId": "u-admin-1",
+    "userName": "José Galdino (Administrador)",
+    "action": "Inicialização do Motor JavaScript",
+    "category": "SYSTEM",
+    "details": "Motor JavaScript SPM Store ativado com sucesso com persistência em disco.",
+    "ip": "127.0.0.1",
+    "severity": "success"
+  }
+]

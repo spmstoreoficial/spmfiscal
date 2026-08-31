@@ -1,0 +1,27 @@
+[
+  {
+    "id": "rule-1",
+    "name": "Nota Fiscal com Valor Acima de R$ 5.000",
+    "type": "HIGH_VALUE",
+    "threshold": 5000,
+    "emailNotify": true,
+    "pushNotify": true,
+    "active": true
+  },
+  {
+    "id": "rule-2",
+    "name": "Fim de Processamento em Lote de PDFs",
+    "type": "BATCH_COMPLETE",
+    "emailNotify": true,
+    "pushNotify": false,
+    "active": true
+  },
+  {
+    "id": "rule-3",
+    "name": "Alerta de Erro na Extração de PDF",
+    "type": "EXTRACTION_ERROR",
+    "emailNotify": true,
+    "pushNotify": true,
+    "active": true
+  }
+]

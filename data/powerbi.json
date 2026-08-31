@@ -1,0 +1,7 @@
+{
+  "enabled": true,
+  "refreshIntervalMinutes": 15,
+  "lastRefresh": "2026-08-23T18:05:04.145Z",
+  "apiKey": "pbi-spm-key-m3t03",
+  "feedUrl": "/api/powerbi/feed"
+}

@@ -1,40 +1,42 @@
 # SPM Store - Sistema Fiscal & Auditoria NFs
 
-Sistema de Extração, Gestão e Auditoria de Notas Fiscais (DANFE / PDF) com Suporte a IA, Excel e XAMPP.
+Sistema de Extração, Gestão e Auditoria de Notas Fiscais (DANFE / PDF) com Banco de Dados **MySQL**, Suporte a IA (Gemini), Integrações (Power BI, Google Sheets, Excel) e XAMPP.
 
 ---
 
-## 🚀 Como Executar no seu Computador (PC Local)
+## 🚀 Como Executar no seu Computador (PC Local com XAMPP)
 
 ### 1. Requisitos Prévios
-- **Node.js**: Baixe e instale a versão LTS recomendada no site oficial: [nodejs.org](https://nodejs.org) (Versão 18 ou superior).
+- **Node.js**: Versão 18 ou superior ([nodejs.org](https://nodejs.org)).
+- **XAMPP**: Com o módulo **MySQL** iniciado (porta padrão `3306`).
 
 ---
 
-### 2. Passo a Passo Simples (Recomendado)
+### 2. Passo a Passo Rápido (1 Clique)
 
-1. **Extrair os Arquivos**:
-   Extraia o arquivo `.zip` em uma pasta no seu computador (Exemplo: `C:\spm-fiscal`).
+1. **Iniciar o MySQL no XAMPP**:
+   - Abra o **XAMPP Control Panel** e clique em **Start** no módulo **MySQL**.
 
-2. **Abrir o Terminal ou Prompt de Comando**:
-   Navegue até a pasta extraída:
-   ```cmd
-   cd C:\spm-fiscal
-   ```
+2. **Executar pelo arquivo automático**:
+   - Dê um duplo clique no arquivo **[`iniciar.bat`](file:///c:/xampp/htdocs/spmfiscal/iniciar.bat)** ou **[`executar.bat`](file:///c:/xampp/htdocs/spmfiscal/executar.bat)**.
+   - O script verifica automaticamente o Node.js, configura o `.env`, instala dependências se necessário, inicia o servidor e abre o navegador em `http://localhost:3000`.
 
-3. **Instalar as Dependências**:
-   No terminal, execute:
+---
+
+### 3. Ou Execução Manual via Terminal
+
+1. **Instalar Dependências**:
    ```cmd
    npm install
    ```
 
-4. **Executar em Modo de Desenvolvimento (Testes)**:
+2. **Executar em Modo de Desenvolvimento**:
    ```cmd
    npm run dev
    ```
    *O sistema estará disponível em:* **`http://localhost:3000`**
 
-5. **Executar em Modo de Produção (Compilado)**:
+3. **Executar em Modo de Produção**:
    ```cmd
    npm run build
    npm start
@@ -42,35 +44,27 @@ Sistema de Extração, Gestão e Auditoria de Notas Fiscais (DANFE / PDF) com Su
 
 ---
 
-## 🐘 Como Executar Integrado ao XAMPP (Apache)
+## 🐘 Como Executar Integrado ao XAMPP (Apache + MySQL)
 
-1. **Copiar a pasta para o XAMPP**:
-   Copie os arquivos da aplicação para a pasta:
-   `C:\xampp\htdocs\spm-fiscal`
+1. **Localização**:
+   A pasta do projeto fica em:
+   `C:\xampp\htdocs\spmfiscal`
 
-2. **Instalar e Compilar**:
-   Abra o Terminal/PowerShell em `C:\xampp\htdocs\spm-fiscal`:
-   ```cmd
-   npm install
-   npm run build
-   ```
+2. **Acessar o Banco no phpMyAdmin**:
+   - Acesse `http://localhost/phpmyadmin`
+   - O banco `spm_fiscal` conterá as tabelas: `invoices`, `users`, `user_passwords`, `audit_logs`, `alert_rules`, `system_settings` e `integrations_config`.
 
-3. **Ativar o Servidor em Segundo Plano**:
-   Para manter a API Node rodando continuamente:
+3. **Manter o Servidor Ativo com PM2**:
    ```cmd
    npm install -g pm2
    pm2 start server.ts --name "spm-fiscal-api"
    ```
 
-4. **Acessar**:
-   - Pelo Apache XAMPP: `http://localhost/spm-fiscal`
-   - Diretamente pelo Node: `http://localhost:3000`
-
 ---
 
 ## 🐳 Como Executar com Docker & Docker Compose
 
-1. **Construir e iniciar o container**:
+1. **Construir e iniciar os containers (App + MySQL + Cloudflare Tunnel)**:
    ```cmd
    docker compose up -d --build
    ```
@@ -78,23 +72,22 @@ Sistema de Extração, Gestão e Auditoria de Notas Fiscais (DANFE / PDF) com Su
 2. **Acessar**:
    - `http://localhost:3000`
 
-3. **Parar o container**:
+3. **Parar os containers**:
    ```cmd
    docker compose down
    ```
 
 ---
 
-## 💾 Persistência de Dados
+## 💾 Tabelas e Persistência no MySQL
 
-Todos os registros de notas fiscais, usuários cadastrados, configurações e regras de alerta são salvos automaticamente na pasta:
-- `data/invoices.json`
-- `data/users.json`
-- `data/logs.json`
-- `data/alerts.json`
-- `data/settings.json`
-
-Mesmo se o servidor ou o computador for reiniciado, **nenhum dado será perdido**.
+O sistema migra automaticamente os dados existentes para as tabelas:
+- **`invoices`**: Registros e itens de Notas Fiscais (Shopee, ML, TikTok, WhatsApp, etc.).
+- **`users`** & **`user_passwords`**: Usuários e hashes criptografados com `bcrypt`.
+- **`audit_logs`**: Trilha de auditoria e conformidade fiscal.
+- **`alert_rules`**: Regras de alerta de alto valor, erros e notificações.
+- **`system_settings`**: Configurações de SMTP, IA Gemini e integrações.
+- **`integrations_config`**: Parâmetros de sincronização com Power BI e Google Sheets.
 
 ---
 

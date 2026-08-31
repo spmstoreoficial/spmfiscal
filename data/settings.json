@@ -1,0 +1,11 @@
+{
+  "smtpHost": "smtp.gmail.com",
+  "smtpPort": 587,
+  "smtpUser": "spmstoreoficial@gmail.com",
+  "smtpSender": "SPM Store Alertas <pmstoreoficial@gmail.com",
+  "emailAlertsEnabled": true,
+  "pushAlertsEnabled": true,
+  "autoExportExcel": true,
+  "useGeminiOcrFallback": true,
+  "vpsMode": false
+}

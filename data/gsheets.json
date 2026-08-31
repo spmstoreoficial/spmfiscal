@@ -1,0 +1,8 @@
+{
+  "spreadsheetId": "1BxiMVs0XRA5nFMdKvBdBZjgmUUqptlbs74OgvE2upms",
+  "sheetName": "Notas Fiscais",
+  "autoSync": true,
+  "lastSync": "2026-08-23T18:05:04.145Z",
+  "status": "CONNECTED",
+  "webhookUrl": "https://script.google.com/macros/s/AKfycbx_fiscal_sync_webhook/exec"
+}

@@ -1,0 +1,19 @@
+# Configuração Apache para XAMPP / htdocs - SPM Store Sistema Fiscal
+<IfModule mod_rewrite.c>
+  RewriteEngine On
+  RewriteBase /
+
+  # Redireciona chamadas de API para o Node.js Backend rodando no XAMPP (localhost:3000)
+  RewriteRule ^api/(.*)$ http://localhost:3000/api/$1 [P,L]
+
+  # Roteamento SPA React
+  RewriteRule ^index\.html$ - [L]
+  RewriteCond %{REQUEST_FILENAME} !-f
+  RewriteCond %{REQUEST_FILENAME} !-d
+  RewriteRule . /index.html [L]
+</IfModule>
+
+# Habilitar Compressão Gzip
+<IfModule mod_deflate.c>
+  AddOutputFilterByType DEFLATE text/html text/plain text/xml text/css application/javascript application/json
+</IfModule>
