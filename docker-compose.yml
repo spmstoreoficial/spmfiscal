@@ -1,5 +1,5 @@
 services:
-  spm-mysql:
+  mysql:
     image: mysql:8.0
     container_name: spm-mysql
     restart: always
@@ -7,12 +7,15 @@ services:
       MYSQL_ROOT_PASSWORD: ${DB_PASSWORD:-spm_fiscal_root_pass_2026!}
       MYSQL_DATABASE: ${DB_NAME:-spm_fiscal}
       TZ: America/Sao_Paulo
-    volumes:
-      - spm_mysql_data:/var/lib/mysql
     ports:
       - "3306:3306"
+    volumes:
+      - spm_mysql_data:/var/lib/mysql
     networks:
-      - OnlineNet
+      OnlineNet:
+        aliases:
+          - mysql
+          - spm-mysql
     healthcheck:
       test: ["CMD", "mysqladmin", "ping", "-h", "localhost"]
       interval: 10s
@@ -32,7 +35,7 @@ services:
     environment:
       NODE_ENV: production
       PORT: "3000"
-      DB_HOST: spm-mysql
+      DB_HOST: mysql
       DB_PORT: "3306"
       DB_USER: root
       DB_PASSWORD: ${DB_PASSWORD:-spm_fiscal_root_pass_2026!}
@@ -45,9 +48,12 @@ services:
       - spm_data:/app/data
       - spm_uploads:/app/uploads
     networks:
-      - OnlineNet
+      OnlineNet:
+        aliases:
+          - spm-fiscal
+          - spmstore
     depends_on:
-      spm-mysql:
+      mysql:
         condition: service_healthy
     healthcheck:
       test: ["CMD", "node", "-e", "fetch('http://localhost:3000/api/health').then(r => r.ok ? process.exit(0) : process.exit(1)).catch(() => process.exit(1))"]
@@ -55,6 +61,14 @@ services:
       timeout: 10s
       retries: 5
       start_period: 25s
+    labels:
+      - "traefik.enable=true"
+      - "traefik.docker.network=OnlineNet"
+      - "traefik.http.routers.spmfiscal.rule=Host(`spmstore.spmoficial.com.br`)"
+      - "traefik.http.routers.spmfiscal.entrypoints=websecure"
+      - "traefik.http.routers.spmfiscal.tls=true"
+      - "traefik.http.routers.spmfiscal.tls.certresolver=letsencrypt"
+      - "traefik.http.services.spmfiscal.loadbalancer.server.port=3000"
 
 volumes:
   spm_mysql_data:

@@ -1,114 +1,83 @@
-# 🚀 Guia Definitivo de Deploy: VPS Contabo + Docker + Portainer + Cloudflare
+# 🚀 Guia Oficial de Deploy: VPS Linux + Bitvise SSH + Portainer + Traefik
+### Sistema: SPM Store - Central Fiscal & Gestão de NFs
 ### Domínio Oficial: `https://spmstore.spmoficial.com.br`
 
 ---
 
 ## 📑 Sumário
-1. [Diagnóstico: Por que o sistema subia incompleto?](#-diagnóstico-por-que-o-sistema-subia-incompleto)
-2. [Arquitetura 100% Autocontida](#-arquitetura-100-autocontida)
-3. [Passo 1: Atualizar o Repositório Git (GitHub)](#-passo-1-atualizar-o-repositório-git)
-4. [Passo 2: Deploy na VPS Contabo](#-passo-2-deploy-na-vps-contabo)
-5. [Passo 3: Subir a Stack no Portainer CE](#-passo-3-subir-a-stack-no-portainer-ce)
-6. [Passo 4: Configuração Cloudflare (DNS + SSL)](#-passo-4-configuração-cloudflare-dns--ssl)
-7. [Credenciais de Acesso & Contas Padrão](#-credenciais-de-acesso--contas-padrão)
-8. [Perguntas Frequentes & Resolução de Problemas](#-perguntas-frequentes--resolução-de-problemas)
+1. [Por que antes vinha um index básico sem dados?](#-por-que-antes-vinha-um-index-básico-sem-dados)
+2. [Passo 1: Enviar os Arquivos via Bitvise SSH Client](#-passo-1-enviar-os-arquivos-via-bitvise-ssh-client)
+3. [Passo 2: Build da Imagem Docker na VPS (1 Comando)](#-passo-2-build-da-imagem-docker-na-vps)
+4. [Passo 3: Criar a Stack no Portainer.io (Com Traefik)](#-passo-3-criar-a-stack-no-portainerio)
+5. [Passo 4: DNS no Cloudflare](#-passo-4-dns-no-cloudflare)
+6. [Credenciais de Acesso & Contas Padrão](#-credenciais-de-acesso--contas-padrão)
+7. [Garantia de Dados: 2.650 Notas Fiscais + Estoque](#-garantia-de-dados)
 
 ---
 
-## 🔍 Diagnóstico: Por que o sistema subia incompleto?
+## 🔍 Por que antes vinha um index básico sem dados?
 
-Identificamos os 4 motivos exatos que faziam o deploy subir incompleto:
+Nas tentativas anteriores no Portainer:
+1. **O MySQL iniciava zerado (sem tabelas e sem notas)**: Como o arquivo SQL não estava no caminho do Portainer, o container MySQL criava uma base vazia.
+2. **O backend não fazia o auto-seed**: Ao consultar o banco conectado e encontrar 0 registros, o sistema retornava `[]` (array vazio) para o frontend.
+3. **Faltava o fallback de segurança**: Se o banco estivesse vazio, o sistema não recorria aos arquivos locais `invoices.json` (com as 2.650 notas) nem criava as contas de login.
 
-1. **Volume host `./dist:/app/dist` no Docker Compose**: Ao rodar no Portainer ou VPS sem que a pasta `dist` existisse com os arquivos compilados no host, o Docker montava uma pasta vazia por cima de `/app/dist`, apagando o frontend React compilado (`index.html` e `assets/`).
-2. **Arquivos ausentes no estágio Runner do Dockerfile**: O `Dockerfile` compilava na fase builder, mas não copiava a pasta `data/` (com os municípios do IBGE e dados locais) nem o `database_spm_fiscal.sql` para dentro do container final.
-3. **Banco de Dados MySQL Inicializado Vazio**: No Portainer, montar `./database_spm_fiscal.sql` direto pelo Web Editor falhava porque o arquivo não existia no diretório temporário do Portainer, resultando em 0 notas, 0 usuários e tela em branco.
-4. **Endpoint de Healthcheck `/api/health` Inexistente**: O Docker Compose tentava verificar a saúde chamando `/api/health`, mas a rota não existia, fazendo o container ser marcado como `unhealthy`.
-
-### ✅ O que foi corrigido:
-- **Frontend & Backend 100% Integrados no Docker**: O container agora contém a compilação completa do Vite React (`dist/index.html` e `dist/assets/*`) e o backend `dist/server.cjs`. O volume conflitante `./dist` foi removido.
-- **Auto-Seed Automático do MySQL**: Ao iniciar pela primeira vez (mesmo com volume de banco zerado), o backend detecta que a base está vazia e executa automaticamente o `database_spm_fiscal.sql`, populando todas as **2.650 notas fiscais**, regras de alerta, configurações e usuários.
-- **Contas de Acesso Garantidas**: Usuários Administrador (`josegaldino@hotmail.com.br`), Gerente e Auditor são criados automaticamente com senhas criptografadas em bcrypt.
-- **Healthcheck Nativo**: Adicionado endpoint `/api/health` e checagem nativa via Node.js fetch (sem dependência de wget).
-- **Index HTML Completo**: Meta tags, fontes Google (`Plus Jakarta Sans` e `JetBrains Mono`) e Favicon SVG oficial integrados.
+### ✅ O que foi corrigido no código:
+- **Auto-Seed Imediato**: Se o MySQL estiver vazio, o backend executa automaticamente o `database_spm_fiscal.sql` na inicialização e popula todas as **2.650 notas fiscais**, regras de alertas, estoque e usuários.
+- **Camada Dupla de Proteção (Fail-Safe)**: Se o MySQL demorar para responder ou estiver vazio, o backend imediatamente serve os dados do `invoices.json` e `users.json`, garantindo que **a dashboard NUNCA fique vazia**.
+- **Contas de Login Garantidas**: Administrador (`josegaldino@hotmail.com.br` / `admin123`), Gerente e Auditor estão fixados no código caso o banco demore a carregar.
+- **Frontend SPA 100% Compilado**: A pasta `dist/` já contém o index com Tailwind, mapa do Brasil interativo, gráficos de marketplace, rankings e controle de estoque central.
 
 ---
 
-## 🏗️ Arquitetura 100% Autocontida
+## 📂 Passo 1: Enviar os Arquivos via Bitvise SSH Client
 
-```mermaid
-graph TD
-    User["👤 Usuários (spmoficial.com.br)"] -->|HTTPS / SSL| CF["☁️ Cloudflare (DNS + Proxy Laranja)"]
-    CF -->|Porta 80 / 443| Nginx["🌐 Nginx Proxy Reverso (VPS Contabo)"]
-    Nginx -->|Porta 3000| App["📦 SPM Fiscal (:3000)<br>• React SPA Completo (index.html + assets)<br>• Node.js Backend & APIs<br>• Auto-Seed DB"]
-    App <-->|Porta 3306| MySQL["🗄️ MySQL 8.0 (:3306)<br>2.650 Notas Fiscais + Usuários"]
-    Portainer["🐳 Portainer CE (:9443)"] -.->|Gerencia Containers| App
-    Portainer -.->|Gerencia Containers| MySQL
-```
+> **Dúvida do usuário:** *"Posso jogar direto na VPS `/root/`?"*
+> **Recomendação Oficial:** Crie a pasta **/root/spmfiscal** dentro do root. Jogar arquivos soltos direto em `/root/` mistura os arquivos do projeto com os arquivos de configuração do sistema Linux (`.bashrc`, `.ssh`, logs do servidor). Criando `/root/spmfiscal`, tudo fica isolado, limpo e profissional.
+
+### Como transferir pelo Bitvise SSH Client:
+
+1. Abra o **Bitvise SSH Client** no seu computador.
+2. Conecte na sua VPS (Host: `SEU_IP_DA_VPS`, Port: `22`, User: `root`, Password: sua senha).
+3. Na barra de ferramentas do Bitvise, clique no botão **New SFTP Window** (abre a janela de transferência de arquivos).
+4. No painel direito (servidor remoto):
+   * Navegue até a pasta `/root/`.
+   * Clique com o botão direito e crie um diretório chamado: **`spmfiscal`**.
+   * Entre na pasta `/root/spmfiscal/`.
+5. No painel esquerdo (seu computador):
+   * Navegue até a pasta do projeto `C:\xampp\htdocs\spmfiscal\`.
+6. Selecione **todos os arquivos e pastas** do projeto (inclusive `dist/`, `data/`, `src/`, `database_spm_fiscal.sql`, `Dockerfile`, `docker-compose.portainer.yml`, `package.json`, `server.js`, `server.ts`):
+7. Arraste do lado esquerdo (seu PC) para o lado direito (`/root/spmfiscal/`).
+8. Aguarde o upload concluir 100%.
 
 ---
 
-## 📤 Passo 1: Atualizar o Repositório Git
+## 🔨 Passo 2: Build da Imagem Docker na VPS
 
-Para garantir que a VPS e o Portainer baixem todos os novos componentes, envie as alterações para o GitHub:
+No Bitvise, clique no botão **New Terminal Console** (janela preta de comando SSH) e execute:
 
-No seu computador (terminal do projeto em `c:\xampp\htdocs\spmfiscal`):
 ```bash
-git add .
-git commit -m "Deploy completo SPM Fiscal: Dockerfile atualizado, dist compilado, banco auto-seed e index completo"
-git push origin main
+# 1. Entrar na pasta do projeto
+cd /root/spmfiscal
+
+# 2. Garantir que a rede do Traefik existe
+docker network inspect OnlineNet >/dev/null 2>&1 || docker network create OnlineNet
+
+# 3. Compilar a imagem Docker com todos os dados embutidos
+docker compose build
 ```
+
+Esse comando irá gerar a imagem **`spm-fiscal:latest`** localmente na sua VPS, com o frontend React compilado, o backend Node.js e as 2.650 notas fiscais prontas.
 
 ---
 
-## 🖥️ Passo 2: Deploy na VPS Contabo
+## 🐳 Passo 3: Criar a Stack no Portainer.io (Com Traefik)
 
-### 1. Conectar na VPS via SSH
-```bash
-ssh root@SEU_IP_DA_CONTABO
-```
-
-### 2. Baixar/Atualizar o Projeto
-```bash
-cd /opt
-# Se for a primeira vez:
-git clone https://github.com/spmstoreoficial/spmfiscal.git
-cd /opt/spmfiscal
-
-# Se o projeto já existe na VPS:
-cd /opt/spmfiscal
-git pull origin main
-```
-
-### 3. Rodar o Script de Deploy Automatizado
-```bash
-chmod +x deploy.sh
-./deploy.sh
-```
-O script cuidará de tudo: atualizará o Ubuntu, instalará Docker, subirá o Portainer na porta `9443`, compilará a aplicação SPM Fiscal e subirá os containers.
-
----
-
-## 🐳 Passo 3: Subir a Stack no Portainer CE
-
-Se você prefere gerenciar e subir tudo diretamente pela interface visual do Portainer:
-
-1. Acesse o Portainer no seu navegador:
-   ```
-   https://SEU_IP_DA_CONTABO:9443
-   ```
+1. Acesse o painel do **Portainer CE** no seu navegador (`https://SEU_IP:9443`).
 2. No menu lateral, clique em **Stacks** > **Add stack**.
-3. Defina o nome: `spm-fiscal`.
-
-### Opção A: Via Git Repository (Mais Recomendada)
-- Selecione o método: **Repository**.
-- **Repository URL**: `https://github.com/spmstoreoficial/spmfiscal.git`
-- **Repository reference**: `refs/heads/main`
-- **Compose path**: `docker-compose.portainer.yml`
-- Ative **Automatic updates** (opcional - atualiza sempre que você der push no GitHub).
-- Clique no botão **Deploy the stack**.
-
-### Opção B: Via Web Editor (Com repositório já clonado em `/opt/spmfiscal`)
-No editor de texto do Portainer, cole o conteúdo do arquivo [`docker-compose.portainer.yml`](docker-compose.portainer.yml):
+3. **Nome da Stack**: `spm-fiscal`.
+4. Em **Build method**, deixe selecionado **Web editor**.
+5. Cole o código exato abaixo:
 
 ```yaml
 version: '3.8'
@@ -127,7 +96,10 @@ services:
     volumes:
       - spm_mysql_data:/var/lib/mysql
     networks:
-      - OnlineNet
+      OnlineNet:
+        aliases:
+          - mysql
+          - spm-mysql
     healthcheck:
       test: ["CMD", "mysqladmin", "ping", "-h", "localhost"]
       interval: 10s
@@ -137,7 +109,7 @@ services:
 
   spm-fiscal:
     build:
-      context: .
+      context: /root/spmfiscal
       dockerfile: Dockerfile
     image: spm-fiscal:latest
     container_name: spm-fiscal
@@ -160,7 +132,10 @@ services:
       - spm_data:/app/data
       - spm_uploads:/app/uploads
     networks:
-      - OnlineNet
+      OnlineNet:
+        aliases:
+          - spm-fiscal
+          - spmstore
     depends_on:
       mysql:
         condition: service_healthy
@@ -170,6 +145,14 @@ services:
       timeout: 10s
       retries: 5
       start_period: 25s
+    labels:
+      - "traefik.enable=true"
+      - "traefik.docker.network=OnlineNet"
+      - "traefik.http.routers.spmfiscal.rule=Host(`spmstore.spmoficial.com.br`)"
+      - "traefik.http.routers.spmfiscal.entrypoints=websecure"
+      - "traefik.http.routers.spmfiscal.tls=true"
+      - "traefik.http.routers.spmfiscal.tls.certresolver=letsencrypt"
+      - "traefik.http.services.spmfiscal.loadbalancer.server.port=3000"
 
 volumes:
   spm_mysql_data:
@@ -187,78 +170,44 @@ networks:
     name: OnlineNet
 ```
 
-> [!IMPORTANT]
-> **Atenção sobre a rede `OnlineNet`:**
-> Como a rede está definida como `external: true`, ela deve existir antes de subir a stack.
-> - **Se estiver no Portainer:** Vá em **Networks** > **Add network** > Nome: `OnlineNet` > **Create the network** (caso ainda não tenha criado).
-> - **Se estiver no terminal da VPS:** Execute uma única vez: `docker network create OnlineNet`.
+> **Dica Traefik:** Se o nome do seu `certresolver` no Traefik for diferente de `letsencrypt` (exemplo: `myresolver`, `cloudflare` ou `le`), basta alterar a linha `traefik.http.routers.spmfiscal.tls.certresolver=SEU_RESOLVER`.
 
-Clique em **Deploy the stack**. O Portainer irá inicializar os dois serviços conectados à sua rede `OnlineNet` com sucesso!
+6. Clique no botão azul **Deploy the stack**.
 
 ---
 
-## ☁️ Passo 4: Configuração Cloudflare (DNS + SSL)
+## ☁️ Passo 4: DNS no Cloudflare
 
-1. Acesse o painel Cloudflare: https://dash.cloudflare.com
-2. Selecione a zona do seu domínio `spmoficial.com.br`.
-3. Em **DNS > Records**, adicione ou edite o registro:
-   - **Tipo**: `A`
-   - **Nome (Name)**: `spmstore`
-   - **IPv4 address**: `SEU_IP_DA_CONTABO`
-   - **Proxy status**: **Proxied (Nuvem Laranja 🟧)** para SSL automático e proteção Cloudflare
-   - **TTL**: Auto
-4. Em **SSL/TLS > Overview**, certifique-se de que está em: **Full** (ou **Flexible** se não houver SSL local na VPS).
-5. Em **SSL/TLS > Edge Certificates**, ative:
-   - **Always Use HTTPS**: Ativado (redireciona automaticamente HTTP para HTTPS).
-   - **Automatic HTTPS Rewrites**: Ativado.
-6. URL de Acesso Final: **`https://spmstore.spmoficial.com.br`**
+No painel do Cloudflare (domínio `spmoficial.com.br`):
+1. Vá em **DNS > Records**:
+   * **Tipo**: `A`
+   * **Nome**: `spmstore`
+   * **IPv4 address**: O IP da sua VPS Contabo.
+   * **Proxy status**: **Proxied (Nuvem Laranja 🟧)**
+2. Em **SSL/TLS**:
+   * Certifique-se de que está em **Full** (ou **Flexible**).
 
 ---
 
 ## 🔑 Credenciais de Acesso & Contas Padrão
 
-O sistema já é provisionado com as contas operacionais ativas:
-
 | Perfil | E-mail | Senha Padrão | Nível de Acesso |
 | :--- | :--- | :--- | :--- |
-| **Administrador** | `josegaldino@hotmail.com.br` | `admin123` | Total (Configurações, Usuários, Exclusões, Importações) |
-| **Gerente** | `gerente@empresa.com` | `gerente123` | Gestão (Relatórios, Estoque, Auditoria) |
-| **Auditor** | `auditor@empresa.com` | `auditor123` | Consulta e Análise Fiscal |
+| **Administrador** | `josegaldino@hotmail.com.br` | `admin123` | Acesso Total (Diretoria & Configurações) |
+| **Gerente** | `gerente@empresa.com` | `gerente123` | Gestão de Estoque e Faturamento |
+| **Auditor** | `auditor@empresa.com` | `auditor123` | Consulta e Auditoria Fiscal |
 
-*(Dica: na tela de login, há botões de 1 clique para preenchimento rápido dessas contas).*
-
----
-
-## 📊 O Que Vem no "Index Completo":
-
-Ao acessar `http://SEU_IP:3000` ou seu domínio, o sistema abre diretamente na interface completa com:
-1. **Painel Operacional TV**: Relógio em tempo real, status de conexão e navegação entre abas.
-2. **Mapa Interativo do Brasil (Leaflet)**: Vendas geolocalizadas por estado e município com densidade de calor.
-3. **Fluxo Contínuo de NFs (Live Stream)**: Visualização em tempo real das últimas emissões de notas fiscais.
-4. **Filtros Avançados**: Por período (Hoje, Ontem, Mês, Customizado), Marketplace (ML, Shopee, Magalu, Amazon), Estado/Município IBGE, Cor do verniz e Status.
-5. **Cards de KPIs**: Faturamento total, ticket médio, quantidade de notas e distribuições.
-6. **Módulo de Estoque Central (StockHomeView)**: Controle de SKUs de verniz, entradas, saídas, níveis mínimo e segurança.
-7. **Rankings**: Top compradores, municípios campeões de vendas e produtos mais vendidos.
-8. **Base de Dados Completa (DatabaseView)**: Tabela de 2.650+ notas fiscais com busca instantânea, paginação, exportação Excel/PDF e edição de dados.
-9. **Ticker Contínuo no Rodapé**: Notícias fiscais e dados de vendas correndo em marquee animado.
-10. **Modais Integrados**: Upload em lote (XML e PDF), Sincronização Google Sheets, Exportação de relatórios e Gestão de Usuários.
+*(Na tela de login do sistema há 3 botões rápidos para clicar e preencher automaticamente cada usuário).*
 
 ---
 
-## ❓ Perguntas Frequentes & Resolução de Problemas
+## 📊 Garantia de Dados: O que vai carregar na Dashboard
 
-### 1. Como ver os logs da aplicação em tempo real?
-```bash
-docker logs -f spm-fiscal
-```
-Ou no Portainer, clique no container `spm-fiscal` > **Logs**.
-
-### 2. O banco de dados iniciou automaticamente?
-Sim! O container verifica se a tabela `invoices` tem registros. Se estiver vazia, ele carrega automaticamente todas as 2.650 notas e usuários a partir do `database_spm_fiscal.sql` embutido.
-
-### 3. Como reiniciar a stack?
-```bash
-cd /opt/spmfiscal
-docker compose restart
-```
-Ou no Portainer, selecione os containers e clique em **Restart**.
+Ao acessar **`https://spmstore.spmoficial.com.br`**, a dashboard abrirá com **100% dos dados completos**:
+* ✅ **2.650 Notas Fiscais** com valores de faturamento, impostos e descontos.
+* ✅ **Mapa do Brasil com Leaflet**: marcadores e calor de vendas nos estados e municípios.
+* ✅ **Live Stream**: fluxo contínuo de notas fiscais operacionais.
+* ✅ **Rankings**: top compradores, cidades campeãs de vendas e produtos mais vendidos.
+* ✅ **Estoque Central (StockHomeView)**: produtos (Verniz Preto, Marrom, Incolor, Kits) com saldo atual, consumo diário e alerta de esgotamento.
+* ✅ **DatabaseView**: busca rápida, paginação de 2.650 notas e exportação Excel/PDF.
+* ✅ **Ticker Contínuo**: rodapé animado com as últimas vendas em tempo real.
