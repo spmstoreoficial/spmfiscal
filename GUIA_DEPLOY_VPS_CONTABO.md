@@ -126,6 +126,8 @@ services:
       - "3306:3306"
     volumes:
       - spm_mysql_data:/var/lib/mysql
+    networks:
+      - OnlineNet
     healthcheck:
       test: ["CMD", "mysqladmin", "ping", "-h", "localhost"]
       interval: 10s
@@ -157,6 +159,8 @@ services:
       - spm_notas_fiscais:/app/Notas_Fiscais
       - spm_data:/app/data
       - spm_uploads:/app/uploads
+    networks:
+      - OnlineNet
     depends_on:
       mysql:
         condition: service_healthy
@@ -176,9 +180,20 @@ volumes:
     driver: local
   spm_uploads:
     driver: local
+
+networks:
+  OnlineNet:
+    external: true
+    name: OnlineNet
 ```
 
-Clique em **Deploy the stack**. O Portainer irá inicializar os dois serviços com sucesso!
+> [!IMPORTANT]
+> **Atenção sobre a rede `OnlineNet`:**
+> Como a rede está definida como `external: true`, ela deve existir antes de subir a stack.
+> - **Se estiver no Portainer:** Vá em **Networks** > **Add network** > Nome: `OnlineNet` > **Create the network** (caso ainda não tenha criado).
+> - **Se estiver no terminal da VPS:** Execute uma única vez: `docker network create OnlineNet`.
+
+Clique em **Deploy the stack**. O Portainer irá inicializar os dois serviços conectados à sua rede `OnlineNet` com sucesso!
 
 ---
 

@@ -96,6 +96,8 @@ fi
 
 # 7. Build e Execução dos Containers (Docker Compose)
 echo -e "${YELLOW}[6/6] Construindo imagens e iniciando aplicação SPM Fiscal...${NC}"
+# Garante a existência da rede interna OnlineNet
+docker network inspect OnlineNet >/dev/null 2>&1 || docker network create OnlineNet
 docker compose down || true
 docker compose build --no-cache
 docker compose up -d
