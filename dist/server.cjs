@@ -2464,6 +2464,7 @@ async function getUsersFromDb() {
       email: "josegaldino@hotmail.com.br",
       role: "ADMIN",
       active: true,
+      lastLogin: "",
       department: "SPM Store - Diretoria"
     },
     {
@@ -2472,6 +2473,7 @@ async function getUsersFromDb() {
       email: "gerente@empresa.com",
       role: "MANAGER",
       active: true,
+      lastLogin: "",
       department: "Faturamento & Gest\xE3o"
     },
     {
@@ -2480,6 +2482,7 @@ async function getUsersFromDb() {
       email: "auditor@empresa.com",
       role: "AUDITOR",
       active: true,
+      lastLogin: "",
       department: "Auditoria Fiscal"
     }
   ];

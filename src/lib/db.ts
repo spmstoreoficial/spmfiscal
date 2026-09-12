@@ -1434,6 +1434,7 @@ export async function getUsersFromDb(): Promise<User[]> {
       email: 'josegaldino@hotmail.com.br',
       role: 'ADMIN',
       active: true,
+      lastLogin: '',
       department: 'SPM Store - Diretoria'
     },
     {
@@ -1442,6 +1443,7 @@ export async function getUsersFromDb(): Promise<User[]> {
       email: 'gerente@empresa.com',
       role: 'MANAGER',
       active: true,
+      lastLogin: '',
       department: 'Faturamento & Gestão'
     },
     {
@@ -1450,6 +1452,7 @@ export async function getUsersFromDb(): Promise<User[]> {
       email: 'auditor@empresa.com',
       role: 'AUDITOR',
       active: true,
+      lastLogin: '',
       department: 'Auditoria Fiscal'
     }
   ];
