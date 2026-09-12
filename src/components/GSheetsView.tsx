@@ -546,114 +546,108 @@ function configurarMonitorAutomatico() {
       {/* Tab: Google Drive Auto-Sync Watcher */}
       {activeTab === 'drive' && (
         <div className="space-y-6">
-          
-          {/* Google Drive para Desktop (100% Offline) Card */}
-          <div className="bg-gradient-to-r from-[#020617] via-[#0f172a] to-[#020617] border-2 border-emerald-500/50 p-6 rounded-2xl shadow-2xl space-y-4">
-            <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-              <div className="space-y-1">
-                <div className="flex items-center gap-2">
-                  <span className="px-2.5 py-0.5 rounded-full bg-emerald-500/20 text-emerald-400 border border-emerald-500/40 text-xs font-mono font-bold uppercase tracking-wider flex items-center gap-1.5">
-                    <span className="w-2 h-2 rounded-full bg-emerald-400 animate-ping"></span>
-                    Monitoramento em Tempo Real (100% Offline)
-                  </span>
-                  <span className="px-2.5 py-0.5 rounded-full bg-cyan-500/10 text-cyan-300 border border-cyan-500/30 text-xs font-mono font-bold">
-                    Unidade I:\
-                  </span>
-                </div>
-                <h3 className="text-xl font-black text-white tracking-tight">
-                  Google Drive para Desktop Instalado
+          <div className="bg-gradient-to-r from-amber-500/10 via-amber-500/5 to-transparent border border-amber-300/50 p-5 rounded-2xl">
+            <div className="flex items-start space-x-3">
+              <div className="p-2 bg-amber-500 text-slate-950 rounded-xl mt-0.5">
+                <CloudLightning className="w-5 h-5" />
+              </div>
+              <div>
+                <h3 className="font-bold text-sm text-slate-900">
+                  Como funciona o Monitor Automático da Pasta do Google Drive?
                 </h3>
-                <p className="text-xs text-slate-300 max-w-3xl">
-                  Ao salvar qualquer nota fiscal em PDF na pasta espelhada do Google Drive no seu computador, o SPM Fiscal faz a extração dos 17 campos e a inserção no MySQL automaticamente em segundo plano.
+                <p className="text-xs text-slate-600 mt-1 leading-relaxed">
+                  Você cria uma pasta no seu <strong>Google Drive</strong> (ex: <em>"Notas_Fiscais_Entrada"</em>) e cola o script abaixo no Apps Script do Google.
+                  Sempre que um arquivo PDF for colocado na pasta, o robô do Google envia o PDF para o SPM Fiscal, que <strong>extrai os 17 campos</strong>, grava no <strong>MySQL</strong>, sincroniza no <strong>database_spm_fiscal.sql</strong> e notifica o <strong>Mapa do Brasil</strong> automaticamente!
                 </p>
               </div>
-
-              <div className="flex flex-wrap items-center gap-2 shrink-0">
-                <button
-                  onClick={async () => {
-                    setIsSyncing(true);
-                    try {
-                      const res = await api.scanGDriveDesktop();
-                      setSyncSuccessMessage(`✅ Google Drive Desktop (I:\\) sincronizado! ${res.count} novo(s) registro(s) salvo(s) no MySQL.`);
-                    } catch (e: any) {
-                      setSyncSuccessMessage(`ℹ️ Erro na sincronização: ${e.message}`);
-                    } finally {
-                      setIsSyncing(false);
-                    }
-                  }}
-                  disabled={isSyncing}
-                  className="px-5 py-3 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white font-bold text-xs shadow-lg shadow-emerald-600/30 transition flex items-center gap-2 border border-emerald-400/40 disabled:opacity-50"
-                >
-                  <RefreshCw className={`w-4 h-4 ${isSyncing ? 'animate-spin' : ''}`} />
-                  <span>{isSyncing ? 'Sincronizando...' : 'Sincronizar Google Drive Agora'}</span>
-                </button>
-              </div>
-            </div>
-
-            {/* Path Box */}
-            <div className="bg-[#020617] p-3 rounded-xl border border-slate-800 flex items-center justify-between gap-2">
-              <div className="flex items-center gap-2 truncate">
-                <FolderSync className="w-4 h-4 text-emerald-400 shrink-0" />
-                <span className="text-xs font-mono text-cyan-400 font-bold truncate select-all">
-                  I:\Meu Drive\SPM Store\SPM Verniz Elite\SPM Verniz\Verniz Elite SPM Pedidos\Notas_Fiscais
-                </span>
-              </div>
-              <button
-                onClick={() => {
-                  navigator.clipboard.writeText('I:\\Meu Drive\\SPM Store\\SPM Verniz Elite\\SPM Verniz\\Verniz Elite SPM Pedidos\\Notas_Fiscais');
-                  setCopiedDriveScript(true);
-                  setTimeout(() => setCopiedDriveScript(false), 2000);
-                }}
-                className="px-2.5 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-bold transition flex items-center gap-1 border border-slate-700 shrink-0"
-              >
-                {copiedDriveScript ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Copy className="w-3.5 h-3.5" />}
-                <span>{copiedDriveScript ? 'Copiado!' : 'Copiar Caminho'}</span>
-              </button>
             </div>
           </div>
 
-          {/* Apps Script Cloud Option (Optional) */}
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-            <div className="bg-[#0f172a]/95 border border-slate-800 p-5 rounded-2xl shadow-xl space-y-4 text-white">
-              <div className="flex items-center space-x-2 border-b border-slate-800 pb-3">
-                <FolderSync className="w-4 h-4 text-amber-400" />
-                <h3 className="font-bold text-white text-sm">Opção Nuvem: Google Apps Script Webhook</h3>
+          {/* Alerta Educativo sobre Localhost & Google Cloud */}
+          <div className="p-4 rounded-xl bg-blue-50 border border-blue-200 text-blue-900 text-xs space-y-2">
+            <div className="flex items-center space-x-2 font-bold text-blue-950">
+              <AlertCircle className="w-4 h-4 text-blue-600 shrink-0" />
+              <span>Por que a URL não pode ser "localhost"? (DNS Error no Google Apps Script)</span>
+            </div>
+            <p className="text-blue-800 leading-relaxed">
+              O <strong>Google Apps Script roda nos servidores em nuvem do Google</strong>. Para o Google, o endereço <code className="bg-blue-100 px-1.5 py-0.5 rounded font-mono">http://localhost:3000</code> não existe na internet. Para conectar, você tem duas opções muito simples:
+            </p>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3 pt-1">
+              <div className="p-3 bg-white rounded-lg border border-blue-200 space-y-1">
+                <p className="font-bold text-slate-900">Opção 1: Criar Túnel Gratuito (1 comando)</p>
+                <p className="text-[11px] text-slate-600">Abra o terminal do Windows e execute:</p>
+                <code className="block bg-slate-900 text-emerald-400 p-2 rounded text-[11px] font-mono select-all">
+                  npx localtunnel --port 3000
+                </code>
+                <p className="text-[10px] text-slate-500">Ele gerará um link público (ex: <code className="text-blue-600">https://xyz.loca.lt/api/drive/sync-pdf</code>). Cole esse link no campo abaixo.</p>
               </div>
 
-              <div className="space-y-3 text-xs text-slate-300">
-                <p className="text-slate-400 leading-relaxed">
-                  Se você também desejar que a nuvem do Google Drive envie os arquivos para o servidor quando você não estiver usando o Google Drive para Desktop:
+              <div className="p-3 bg-white rounded-lg border border-blue-200 space-y-1">
+                <p className="font-bold text-slate-900">Opção 2: Google Drive para Desktop (100% Offline)</p>
+                <p className="text-[11px] text-slate-600 leading-tight">
+                  Se você tiver o aplicativo do Google Drive instalado no computador, a pasta do Drive já fica sincronizada na sua máquina como uma pasta normal do Windows.
                 </p>
+                <p className="text-[10px] text-slate-500">
+                  Basta colocar os PDFs na pasta <code className="bg-slate-100 px-1">Notas_Fiscais/</code> e clicar em <strong>"Escanear Pasta"</strong> no SPM Fiscal!
+                </p>
+              </div>
+            </div>
+          </div>
 
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            {/* Parâmetros do Google Drive */}
+            <div className="bg-white border border-slate-200 p-5 rounded-2xl shadow-sm space-y-4">
+              <div className="flex items-center space-x-2 border-b border-slate-100 pb-3">
+                <FolderSync className="w-4 h-4 text-amber-600" />
+                <h3 className="font-bold text-slate-900 text-sm">Parâmetros do Monitor do Google Drive</h3>
+              </div>
+
+              <div className="space-y-3 text-xs">
                 <div>
-                  <label className="block text-slate-400 mb-1 font-bold">ID da Pasta do Google Drive (Nuvem)</label>
+                  <label className="block text-slate-700 mb-1 font-bold">1. ID da Pasta do Google Drive</label>
                   <input
                     type="text"
                     value={driveFolderId}
                     onChange={e => setDriveFolderId(e.target.value)}
-                    placeholder="Ex: 1cqhLdzayHMwzLxdi60rucCEqvK0tfHOz"
-                    className="w-full bg-[#020617] border border-slate-800 text-slate-200 rounded-xl p-2.5 outline-none font-mono text-xs focus:ring-1 focus:ring-amber-500"
+                    placeholder="Ex: 1A2B3C_4D5E6F_7G8H9I"
+                    className="w-full bg-slate-50 border border-slate-200 text-slate-800 rounded-lg p-2.5 outline-none font-mono text-xs focus:ring-2 focus:ring-amber-500"
                   />
+                  <p className="text-[11px] text-slate-400 mt-1">
+                    Abra a pasta no Google Drive no navegador e copie o código após <code className="bg-slate-100 px-1 rounded">folders/</code> na barra de endereços.
+                  </p>
                 </div>
 
                 <div>
-                  <label className="block text-slate-400 mb-1 font-bold">URL do Endpoint no Servidor</label>
+                  <label className="block text-slate-700 mb-1 font-bold">2. URL do Endpoint no Servidor (Webhook SPM Fiscal)</label>
                   <input
                     type="text"
                     value={driveServerUrl}
                     onChange={e => setDriveServerUrl(e.target.value)}
-                    className="w-full bg-[#020617] border border-slate-800 text-slate-200 rounded-xl p-2.5 outline-none font-mono text-xs focus:ring-1 focus:ring-amber-500"
+                    className="w-full bg-slate-50 border border-slate-200 text-slate-800 rounded-lg p-2.5 outline-none font-mono text-xs focus:ring-2 focus:ring-amber-500"
                   />
+                  <p className="text-[11px] text-slate-400 mt-1">
+                    Se estiver em rede local ou VPS, use o seu IP ou URL pública (Cloudflare Tunnel / ngrok).
+                  </p>
+                </div>
+
+                <div className="p-3 bg-slate-50 border border-slate-200 rounded-xl space-y-2">
+                  <div className="font-bold text-slate-800 flex items-center space-x-1.5">
+                    <FolderArchive className="w-3.5 h-3.5 text-amber-600" />
+                    <span>Organização Automática de Arquivos:</span>
+                  </div>
+                  <p className="text-[11px] text-slate-600 leading-relaxed">
+                    Assim que cada PDF é processado com sucesso, o script o transfere automaticamente para a subpasta <strong>"Processadas"</strong> dentro do Google Drive para que nunca seja processado duas vezes!
+                  </p>
                 </div>
               </div>
             </div>
 
             {/* Código do Monitor Automático do Drive */}
-            <div className="bg-[#0f172a]/95 border border-slate-800 p-5 rounded-2xl shadow-xl space-y-4 text-white">
-              <div className="flex items-center justify-between border-b border-slate-800 pb-3">
+            <div className="bg-white border border-slate-200 p-5 rounded-2xl shadow-sm space-y-4">
+              <div className="flex items-center justify-between border-b border-slate-100 pb-3">
                 <div className="flex items-center space-x-2">
-                  <FileCode className="w-4 h-4 text-amber-400" />
-                  <h3 className="font-bold text-white text-sm">Script Google Apps Script (Drive Watcher)</h3>
+                  <FileCode className="w-4 h-4 text-amber-600" />
+                  <h3 className="font-bold text-slate-900 text-sm">Script Google Apps Script (Drive Watcher)</h3>
                 </div>
 
                 <button
@@ -668,13 +662,13 @@ function configurarMonitorAutomatico() {
                   ) : (
                     <>
                       <Copy className="w-3.5 h-3.5" />
-                      <span>Copiar Script</span>
+                      <span>Copiar Script do Drive</span>
                     </>
                   )}
                 </button>
               </div>
 
-              <div className="bg-[#020617] p-3.5 rounded-xl text-xs font-mono text-amber-300 overflow-x-auto max-h-64 border border-slate-800 leading-relaxed">
+              <div className="bg-[#0F172A] p-3.5 rounded-xl text-xs font-mono text-amber-300 overflow-x-auto max-h-72 border border-slate-800 leading-relaxed">
                 <pre>{googleDriveWatcherScript}</pre>
               </div>
             </div>

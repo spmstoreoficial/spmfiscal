@@ -1,193 +1,246 @@
 # 🚀 Guia Definitivo de Deploy: VPS Contabo + Docker + Portainer + Cloudflare
 ### Sistema: SPM Store - Central Fiscal & Gestão de NFs
-### Domínio Alvo: `spmoficial.com.br` (ou `fiscal.spmoficial.com.br`)
+### Domínio: `spmoficial.com.br` (ou `fiscal.spmoficial.com.br`)
 
 ---
 
 ## 📑 Sumário
-1. [Visão Geral da Arquitetura](#-1-visão-geral-da-arquitetura)
-2. [Passo 1: Preparar a VPS Contabo (Acesso SSH & 1-Click Script)](#-passo-1-preparar-a-vps-contabo)
-3. [Passo 2: Configurar o Portainer.io (Interface Web)](#-passo-2-configurar-o-portainerio)
-4. [Passo 3: Configurar o Domínio no Cloudflare (DNS + SSL)](#-passo-3-configurar-o-domínio-no-cloudflare)
-5. [Passo 4: Sincronização e Importação da Base de Dados](#-passo-4-sincronização-e-importação-da-base-de-dados)
-6. [Passo 5: Atualizações Futuras e Manutenção Contínua](#-passo-5-atualizações-futuras-e-manutenção-contínua)
+1. [Diagnóstico: Por que o sistema subia incompleto?](#-diagnóstico-por-que-o-sistema-subia-incompleto)
+2. [Arquitetura 100% Autocontida](#-arquitetura-100-autocontida)
+3. [Passo 1: Atualizar o Repositório Git (GitHub)](#-passo-1-atualizar-o-repositório-git)
+4. [Passo 2: Deploy na VPS Contabo](#-passo-2-deploy-na-vps-contabo)
+5. [Passo 3: Subir a Stack no Portainer CE](#-passo-3-subir-a-stack-no-portainer-ce)
+6. [Passo 4: Configuração Cloudflare (DNS + SSL)](#-passo-4-configuração-cloudflare-dns--ssl)
+7. [Credenciais de Acesso & Contas Padrão](#-credenciais-de-acesso--contas-padrão)
+8. [Perguntas Frequentes & Resolução de Problemas](#-perguntas-frequentes--resolução-de-problemas)
 
 ---
 
-## 🏗️ 1. Visão Geral da Arquitetura
+## 🔍 Diagnóstico: Por que o sistema subia incompleto?
+
+Identificamos os 4 motivos exatos que faziam o deploy subir incompleto:
+
+1. **Volume host `./dist:/app/dist` no Docker Compose**: Ao rodar no Portainer ou VPS sem que a pasta `dist` existisse com os arquivos compilados no host, o Docker montava uma pasta vazia por cima de `/app/dist`, apagando o frontend React compilado (`index.html` e `assets/`).
+2. **Arquivos ausentes no estágio Runner do Dockerfile**: O `Dockerfile` compilava na fase builder, mas não copiava a pasta `data/` (com os municípios do IBGE e dados locais) nem o `database_spm_fiscal.sql` para dentro do container final.
+3. **Banco de Dados MySQL Inicializado Vazio**: No Portainer, montar `./database_spm_fiscal.sql` direto pelo Web Editor falhava porque o arquivo não existia no diretório temporário do Portainer, resultando em 0 notas, 0 usuários e tela em branco.
+4. **Endpoint de Healthcheck `/api/health` Inexistente**: O Docker Compose tentava verificar a saúde chamando `/api/health`, mas a rota não existia, fazendo o container ser marcado como `unhealthy`.
+
+### ✅ O que foi corrigido:
+- **Frontend & Backend 100% Integrados no Docker**: O container agora contém a compilação completa do Vite React (`dist/index.html` e `dist/assets/*`) e o backend `dist/server.cjs`. O volume conflitante `./dist` foi removido.
+- **Auto-Seed Automático do MySQL**: Ao iniciar pela primeira vez (mesmo com volume de banco zerado), o backend detecta que a base está vazia e executa automaticamente o `database_spm_fiscal.sql`, populando todas as **2.650 notas fiscais**, regras de alerta, configurações e usuários.
+- **Contas de Acesso Garantidas**: Usuários Administrador (`josegaldino@hotmail.com.br`), Gerente e Auditor são criados automaticamente com senhas criptografadas em bcrypt.
+- **Healthcheck Nativo**: Adicionado endpoint `/api/health` e checagem nativa via Node.js fetch (sem dependência de wget).
+- **Index HTML Completo**: Meta tags, fontes Google (`Plus Jakarta Sans` e `JetBrains Mono`) e Favicon SVG oficial integrados.
+
+---
+
+## 🏗️ Arquitetura 100% Autocontida
 
 ```mermaid
 graph TD
-    Client["👤 Usuários / Navegador (spmoficial.com.br)"] -->|HTTPS / SSL Full| CF["☁️ Cloudflare (DNS + CDN + WAF)"]
-    CF -->|Porta 80/443 ou Tunnel| VPS["🖥️ VPS Contabo (Ubuntu Server)"]
-    
-    subgraph "Docker Engine na VPS"
-        Portainer["🐳 Portainer CE (:9443 / :9000)"]
-        SPMApp["📦 spm-store-fiscal (Node.js + React :3000)"]
-        MySQL["🗄️ spm-mysql (MySQL 8.0 :3306)"]
-        
-        SPMApp <-->|Rede Interna spm_rede| MySQL
-        Portainer -.->|Gerencia Containers & Volumes| SPMApp
-        Portainer -.->|Gerencia Containers & Volumes| MySQL
-    end
+    User["👤 Usuários (spmoficial.com.br)"] -->|HTTPS / SSL| CF["☁️ Cloudflare (DNS + Proxy Laranja)"]
+    CF -->|Porta 80 / 443| Nginx["🌐 Nginx Proxy Reverso (VPS Contabo)"]
+    Nginx -->|Porta 3000| App["📦 SPM Fiscal (:3000)<br>• React SPA Completo (index.html + assets)<br>• Node.js Backend & APIs<br>• Auto-Seed DB"]
+    App <-->|Porta 3306| MySQL["🗄️ MySQL 8.0 (:3306)<br>2.650 Notas Fiscais + Usuários"]
+    Portainer["🐳 Portainer CE (:9443)"] -.->|Gerencia Containers| App
+    Portainer -.->|Gerencia Containers| MySQL
 ```
 
 ---
 
-## 🖥️ Passo 1: Preparar a VPS Contabo
+## 📤 Passo 1: Atualizar o Repositório Git
+
+Para garantir que a VPS e o Portainer baixem todos os novos componentes, envie as alterações para o GitHub:
+
+No seu computador (terminal do projeto em `c:\xampp\htdocs\spmfiscal`):
+```bash
+git add .
+git commit -m "Deploy completo SPM Fiscal: Dockerfile atualizado, dist compilado, banco auto-seed e index completo"
+git push origin main
+```
+
+---
+
+## 🖥️ Passo 2: Deploy na VPS Contabo
 
 ### 1. Conectar na VPS via SSH
-Abra o terminal (PowerShell, CMD ou PuTTY) no seu computador e digite:
 ```bash
 ssh root@SEU_IP_DA_CONTABO
 ```
-*(Substitua `SEU_IP_DA_CONTABO` pelo IP que a Contabo enviou no seu e-mail).*
 
----
-
-### 2. Clonar o Projeto para a VPS
-No terminal da VPS, execute:
+### 2. Baixar/Atualizar o Projeto
 ```bash
 cd /opt
-git clone https://github.com/SEU_USUARIO/spmfiscal.git
+# Se for a primeira vez:
+git clone https://github.com/spmstoreoficial/spmfiscal.git
 cd /opt/spmfiscal
+
+# Se o projeto já existe na VPS:
+cd /opt/spmfiscal
+git pull origin main
 ```
-*(Ou envie os arquivos diretamente via SCP/FileZilla para a pasta `/opt/spmfiscal`)*.
 
----
-
-### 3. Executar o Deploy Automatizado em 1 Comando
-Dê permissão de execução e rode o script `deploy.sh`:
+### 3. Rodar o Script de Deploy Automatizado
 ```bash
 chmod +x deploy.sh
 ./deploy.sh
 ```
-
-O script cuidará automaticamente de:
-- ✅ Atualizar o sistema operacional (Ubuntu).
-- ✅ Instalar Docker e Docker Compose.
-- ✅ Subir o painel do **Portainer CE** nas portas `9443` (HTTPS) e `9000` (HTTP).
-- ✅ Configurar as regras de segurança no Firewall (UFW).
-- ✅ Construir a imagem da aplicação SPM Store Fiscal.
-- ✅ Iniciar o MySQL e a aplicação.
+O script cuidará de tudo: atualizará o Ubuntu, instalará Docker, subirá o Portainer na porta `9443`, compilará a aplicação SPM Fiscal e subirá os containers.
 
 ---
 
-## 🐳 Passo 2: Configurar o Portainer.io
+## 🐳 Passo 3: Subir a Stack no Portainer CE
 
-1. Abra seu navegador e acesse:
+Se você prefere gerenciar e subir tudo diretamente pela interface visual do Portainer:
+
+1. Acesse o Portainer no seu navegador:
    ```
    https://SEU_IP_DA_CONTABO:9443
    ```
-   *(Caso apareça aviso de certificado autoassinado, clique em "Avançado" > "Continuar para o site")*.
+2. No menu lateral, clique em **Stacks** > **Add stack**.
+3. Defina o nome: `spm-fiscal`.
 
-2. **Crie o seu usuário Administrador** e senha forte.
-3. Clique em **"Get Started"** ou selecione o ambiente **Local**.
-4. No menu esquerdo, vá em **"Containers"**:
-   - Você verá os containers ativos: `spm-store-fiscal`, `spm-mysql` e `portainer`.
-5. Se desejar atualizar ou subir novas Stacks:
-   - Vá em **"Stacks"** > **"Add Stack"**.
-   - Nome: `spm-fiscal-stack`.
-   - Cole o conteúdo do arquivo [`docker-compose.portainer.yml`](docker-compose.portainer.yml).
-   - Clique em **"Deploy the stack"**.
+### Opção A: Via Git Repository (Mais Recomendada)
+- Selecione o método: **Repository**.
+- **Repository URL**: `https://github.com/spmstoreoficial/spmfiscal.git`
+- **Repository reference**: `refs/heads/main`
+- **Compose path**: `docker-compose.portainer.yml`
+- Ative **Automatic updates** (opcional - atualiza sempre que você der push no GitHub).
+- Clique no botão **Deploy the stack**.
+
+### Opção B: Via Web Editor (Com repositório já clonado em `/opt/spmfiscal`)
+No editor de texto do Portainer, cole o conteúdo do arquivo [`docker-compose.portainer.yml`](docker-compose.portainer.yml):
+
+```yaml
+version: '3.8'
+
+services:
+  mysql:
+    image: mysql:8.0
+    container_name: spm-mysql
+    restart: always
+    environment:
+      MYSQL_ROOT_PASSWORD: ${DB_PASSWORD:-spm_fiscal_root_pass_2026!}
+      MYSQL_DATABASE: ${DB_NAME:-spm_fiscal}
+      TZ: America/Sao_Paulo
+    ports:
+      - "3306:3306"
+    volumes:
+      - spm_mysql_data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 20s
+
+  spm-fiscal:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: spm-fiscal:latest
+    container_name: spm-fiscal
+    restart: always
+    ports:
+      - "3000:3000"
+    environment:
+      NODE_ENV: production
+      PORT: "3000"
+      DB_HOST: mysql
+      DB_PORT: "3306"
+      DB_USER: root
+      DB_PASSWORD: ${DB_PASSWORD:-spm_fiscal_root_pass_2026!}
+      DB_NAME: ${DB_NAME:-spm_fiscal}
+      JWT_SECRET: ${JWT_SECRET:-spm_store_ultra_secure_jwt_token_prod_2026_fiscal_elite}
+      APP_URL: ${APP_URL:-https://fiscal.spmoficial.com.br}
+      TZ: America/Sao_Paulo
+    volumes:
+      - spm_notas_fiscais:/app/Notas_Fiscais
+      - spm_data:/app/data
+      - spm_uploads:/app/uploads
+    depends_on:
+      mysql:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://localhost:3000/api/health').then(r => r.ok ? process.exit(0) : process.exit(1)).catch(() => process.exit(1))"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 25s
+
+volumes:
+  spm_mysql_data:
+    driver: local
+  spm_notas_fiscais:
+    driver: local
+  spm_data:
+    driver: local
+  spm_uploads:
+    driver: local
+```
+
+Clique em **Deploy the stack**. O Portainer irá inicializar os dois serviços com sucesso!
 
 ---
 
-## ☁️ Passo 3: Configurar o Domínio no Cloudflare
+## ☁️ Passo 4: Configuração Cloudflare (DNS + SSL)
 
-### 1. Adicionar o Apontamento DNS
-1. Acesse https://dash.cloudflare.com e clique no seu domínio `spmoficial.com.br`.
-2. No menu lateral esquerdo, clique em **DNS** > **Records**.
-3. Clique no botão **"Add record"**:
-   - **Type (Tipo)**: `A`
-   - **Name (Nome)**: `@` (para acessar direto como `spmoficial.com.br`) ou `fiscal` (para `fiscal.spmoficial.com.br`).
-   - **IPv4 address**: O IP da sua VPS Contabo.
-   - **Proxy status**: Deixe ativado como **Proxied (Nuvem Laranja 🟧)** para proteção contra DDoS e SSL automático.
-   - **TTL**: Auto.
-4. Clique em **Save**.
-
----
-
-### 2. Configurar o SSL/TLS no Cloudflare
-1. No menu esquerdo do Cloudflare, vá em **SSL/TLS**.
-2. Na aba **Overview**, marque o modo de criptografia como:
-   - **Full** (ou **Flexible** se não tiver certificado local no Nginx).
-3. Na aba **Edge Certificates**:
-   - Ative **Always Use HTTPS** (Redirecionamento automático de HTTP para HTTPS).
-   - Ative **Automatic HTTPS Rewrites**.
+1. Acesse o painel Cloudflare: https://dash.cloudflare.com
+2. Selecione o domínio `spmoficial.com.br`.
+3. Em **DNS > Records**, adicione:
+   - **Tipo**: `A`
+   - **Nome**: `@` (ou `fiscal`)
+   - **IPv4**: `SEU_IP_DA_CONTABO`
+   - **Proxy**: **Proxied (Nuvem Laranja 🟧)**
+4. Em **SSL/TLS > Overview**, selecione: **Full**.
+5. Em **SSL/TLS > Edge Certificates**, ative: **Always Use HTTPS**.
 
 ---
 
-### 3. Redirecionamento da Porta 3000 para a Porta 80/443 (Nginx Proxy ou Cloudflare Rules)
+## 🔑 Credenciais de Acesso & Contas Padrão
 
-#### Opção Recomendada (Nginx Proxy Reverso na VPS):
-Para que seu domínio `spmoficial.com.br` abra direto na porta padrão 80/443 sem precisar digitar `:3000`, configure o Nginx na VPS:
+O sistema já é provisionado com as contas operacionais ativas:
 
+| Perfil | E-mail | Senha Padrão | Nível de Acesso |
+| :--- | :--- | :--- | :--- |
+| **Administrador** | `josegaldino@hotmail.com.br` | `admin123` | Total (Configurações, Usuários, Exclusões, Importações) |
+| **Gerente** | `gerente@empresa.com` | `gerente123` | Gestão (Relatórios, Estoque, Auditoria) |
+| **Auditor** | `auditor@empresa.com` | `auditor123` | Consulta e Análise Fiscal |
+
+*(Dica: na tela de login, há botões de 1 clique para preenchimento rápido dessas contas).*
+
+---
+
+## 📊 O Que Vem no "Index Completo":
+
+Ao acessar `http://SEU_IP:3000` ou seu domínio, o sistema abre diretamente na interface completa com:
+1. **Painel Operacional TV**: Relógio em tempo real, status de conexão e navegação entre abas.
+2. **Mapa Interativo do Brasil (Leaflet)**: Vendas geolocalizadas por estado e município com densidade de calor.
+3. **Fluxo Contínuo de NFs (Live Stream)**: Visualização em tempo real das últimas emissões de notas fiscais.
+4. **Filtros Avançados**: Por período (Hoje, Ontem, Mês, Customizado), Marketplace (ML, Shopee, Magalu, Amazon), Estado/Município IBGE, Cor do verniz e Status.
+5. **Cards de KPIs**: Faturamento total, ticket médio, quantidade de notas e distribuições.
+6. **Módulo de Estoque Central (StockHomeView)**: Controle de SKUs de verniz, entradas, saídas, níveis mínimo e segurança.
+7. **Rankings**: Top compradores, municípios campeões de vendas e produtos mais vendidos.
+8. **Base de Dados Completa (DatabaseView)**: Tabela de 2.650+ notas fiscais com busca instantânea, paginação, exportação Excel/PDF e edição de dados.
+9. **Ticker Contínuo no Rodapé**: Notícias fiscais e dados de vendas correndo em marquee animado.
+10. **Modais Integrados**: Upload em lote (XML e PDF), Sincronização Google Sheets, Exportação de relatórios e Gestão de Usuários.
+
+---
+
+## ❓ Perguntas Frequentes & Resolução de Problemas
+
+### 1. Como ver os logs da aplicação em tempo real?
 ```bash
-apt-get install -y nginx
+docker logs -f spm-fiscal
 ```
+Ou no Portainer, clique no container `spm-fiscal` > **Logs**.
 
-Crie o arquivo de configuração `/etc/nginx/sites-available/spmoficial.conf`:
-```nginx
-server {
-    listen 80;
-    server_name spmoficial.com.br fiscal.spmoficial.com.br;
+### 2. O banco de dados iniciou automaticamente?
+Sim! O container verifica se a tabela `invoices` tem registros. Se estiver vazia, ele carrega automaticamente todas as 2.650 notas e usuários a partir do `database_spm_fiscal.sql` embutido.
 
-    client_max_body_size 100M;
-
-    location / {
-        proxy_pass http://127.0.0.1:3000;
-        proxy_http_version 1.1;
-        proxy_set_header Upgrade $http_upgrade;
-        proxy_set_header Connection 'upgrade';
-        proxy_set_header Host $host;
-        proxy_cache_bypass $http_upgrade;
-        proxy_set_header X-Real-IP $remote_addr;
-        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-        proxy_set_header X-Forwarded-Proto $scheme;
-    }
-}
-```
-
-Ative o site e reinicie o Nginx:
-```bash
-ln -s /etc/nginx/sites-available/spmoficial.conf /etc/nginx/sites-enabled/
-nginx -t && systemctl restart nginx
-```
-
----
-
-## 🗄️ Passo 4: Sincronização e Importação da Base de Dados
-
-Para restaurar ou importar o banco de dados completo com as 2.535+ notas fiscais na VPS:
-
-```bash
-# Executa a importação do arquivo SQL diretamente no container MySQL do Docker
-docker exec -i spm-mysql mysql -u root -pspm_fiscal_root_pass_2026! spm_fiscal < /opt/spmfiscal/database_spm_fiscal.sql
-```
-
----
-
-## 🔄 Passo 5: Atualizações Futuras (Como Atualizar a Aplicação)
-
-Sempre que fizer alterações no código e quiser atualizar na VPS Contabo, basta rodar:
-
+### 3. Como reiniciar a stack?
 ```bash
 cd /opt/spmfiscal
-git pull origin main
-docker compose build --no-cache spm-fiscal
-docker compose up -d spm-fiscal
+docker compose restart
 ```
-*(Ou no Portainer, basta abrir o Container `spm-store-fiscal`, clicar em **Recreate** com **Pull latest image**)*.
-
----
-
-## ✅ Resumo das Portas Utilizadas
-
-| Serviço | Porta | Descrição |
-| :--- | :--- | :--- |
-| **SPM Fiscal** | `3000` / `80` / `443` | Sistema Fiscal & Dashboard Web |
-| **Portainer HTTPS** | `9443` | Painel de Gestão dos Containers |
-| **Portainer HTTP** | `9000` | Painel de Gestão Alternativo |
-| **MySQL Database** | `3306` | Banco de Dados Relacional |
-| **SSH** | `22` | Acesso ao Terminal da VPS |
+Ou no Portainer, selecione os containers e clique em **Restart**.

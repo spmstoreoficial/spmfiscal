@@ -1,4 +1,4 @@
-import React, { useState, useRef, useMemo } from 'react';
+import React, { useState } from 'react';
 import { 
   Database, 
   Search, 
@@ -12,25 +12,22 @@ import {
   AlertTriangle, 
   Check, 
   Filter, 
-  Eye, 
-  ShoppingBag, 
-  Tag, 
-  MapPin, 
-  Sparkles, 
-  DollarSign, 
-  Download, 
-  RotateCcw,
-  UploadCloud,
-  FileCheck,
-  RefreshCw,
-  SlidersHorizontal,
+  FileText,
+  Copy,
   Layers,
-  CheckCircle2,
-  Barcode
+  Building2,
+  Tag,
+  Percent,
+  DollarSign,
+  Truck,
+  CreditCard,
+  ShieldCheck,
+  LayoutGrid
 } from 'lucide-react';
 import { Invoice } from '../types';
 import { api } from '../lib/api';
-import { playAttendanceChime, playUrgentAlert } from '../utils/audioAlert';
+import { CityAutocompleteIBGE } from './CityAutocompleteIBGE';
+import { InvoiceDetailModal } from './InvoiceDetailModal';
 
 interface DatabaseViewProps {
   invoices: Invoice[];
@@ -38,56 +35,24 @@ interface DatabaseViewProps {
   userRole?: string;
 }
 
+type ColumnViewCategory = 'all' | 'dest' | 'prod' | 'tax' | 'total' | 'transp' | 'pay' | 'sefaz' | 'standard';
+
 export const DatabaseView: React.FC<DatabaseViewProps> = ({ invoices, onRefreshData, userRole }) => {
   const [searchTerm, setSearchTerm] = useState('');
   const [origemFilter, setOrigemFilter] = useState('Todas');
   const [corFilter, setCorFilter] = useState('Todas');
   const [ufFilter, setUfFilter] = useState('Todos');
-  const [skuFilter, setSkuFilter] = useState('Todos');
+  const [activeCategory, setActiveCategory] = useState<ColumnViewCategory>('all');
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [editingInvoice, setEditingInvoice] = useState<Invoice | null>(null);
-  const [viewingDanfeInvoice, setViewingDanfeInvoice] = useState<Invoice | null>(null);
   const [isNewInvoiceModalOpen, setIsNewInvoiceModalOpen] = useState(false);
   const [isResetModalOpen, setIsResetModalOpen] = useState(false);
   const [isResetting, setIsResetting] = useState(false);
   const [resetSuccessMsg, setResetSuccessMsg] = useState<string | null>(null);
+  const [selectedDetailInvoice, setSelectedDetailInvoice] = useState<Invoice | null>(null);
+  const [copiedKey, setCopiedKey] = useState<string | null>(null);
 
-  // Bulk Edit State (Edição em Lote)
-  const [isBulkEditModalOpen, setIsBulkEditModalOpen] = useState(false);
-  const [bulkTargetIds, setBulkTargetIds] = useState<string[]>([]);
-  const [isBulkUpdating, setIsBulkUpdating] = useState(false);
-  const [bulkSuccessMsg, setBulkSuccessMsg] = useState<string | null>(null);
-  const [bulkEditForm, setBulkEditForm] = useState<{
-    cor: string;
-    origem: string;
-    quantidade: string;
-    codigo: string;
-    descricao: string;
-    status: string;
-  }>({
-    cor: 'MANTER',
-    origem: 'MANTER',
-    quantidade: 'MANTER',
-    codigo: 'MANTER',
-    descricao: 'MANTER',
-    status: 'MANTER'
-  });
-
-  // Import Excel State
-  const [isImportExcelModalOpen, setIsImportExcelModalOpen] = useState(false);
-  const [importFile, setImportFile] = useState<File | null>(null);
-  const [isImporting, setIsImporting] = useState(false);
-  const [importResult, setImportResult] = useState<{
-    success: boolean;
-    totalRows: number;
-    updatedCount: number;
-    insertedCount: number;
-    message: string;
-  } | null>(null);
-  const [importError, setImportError] = useState<string | null>(null);
-  const excelFileInputRef = useRef<HTMLInputElement>(null);
-
-  // New Invoice Form State (17 campos)
+  // New Invoice Form State
   const [newInv, setNewInv] = useState<Partial<Invoice>>({
     nome: '',
     documento: '',
@@ -109,37 +74,35 @@ export const DatabaseView: React.FC<DatabaseViewProps> = ({ invoices, onRefreshD
     status: 'Processado'
   });
 
-  // Lista dinâmica de SKUs únicos presentes nas notas
-  const uniqueSkus = useMemo(() => {
-    const skus = new Set<string>();
-    invoices.forEach(inv => {
-      if (inv.codigo && inv.codigo.trim()) {
-        skus.add(inv.codigo.trim());
-      }
-    });
-    return Array.from(skus).sort();
-  }, [invoices]);
+  const handleCopyText = (text: string, id: string) => {
+    navigator.clipboard.writeText(text);
+    setCopiedKey(id);
+    setTimeout(() => setCopiedKey(null), 2000);
+  };
 
   // Filtered invoices
-  const filteredInvoices = useMemo(() => {
-    return invoices.filter(inv => {
-      const term = searchTerm.toLowerCase();
-      const matchesSearch = 
-        (inv.nome || '').toLowerCase().includes(term) ||
-        (inv.documento || '').includes(term) ||
-        (inv.codigo || '').toLowerCase().includes(term) ||
-        (inv.descricao || '').toLowerCase().includes(term) ||
-        (inv.municipio || '').toLowerCase().includes(term) ||
-        (inv.fatura || '').includes(term);
-      
-      const matchesOrigem = origemFilter === 'Todas' || inv.origem === origemFilter;
-      const matchesCor = corFilter === 'Todas' || (inv.cor || '').toLowerCase() === corFilter.toLowerCase();
-      const matchesUf = ufFilter === 'Todos' || inv.uf === ufFilter;
-      const matchesSku = skuFilter === 'Todos' || (inv.codigo || '').trim().toLowerCase() === skuFilter.trim().toLowerCase();
+  const filteredInvoices = invoices.filter(inv => {
+    const term = searchTerm.toLowerCase();
+    const xml = inv.xmlDetails || {};
 
-      return matchesSearch && matchesOrigem && matchesCor && matchesUf && matchesSku;
-    });
-  }, [invoices, searchTerm, origemFilter, corFilter, ufFilter, skuFilter]);
+    const matchesSearch = 
+      (inv.nome || '').toLowerCase().includes(term) ||
+      (inv.documento || '').includes(term) ||
+      (inv.codigo || '').toLowerCase().includes(term) ||
+      (inv.descricao || '').toLowerCase().includes(term) ||
+      (inv.municipio || '').toLowerCase().includes(term) ||
+      (inv.fatura || '').includes(term) ||
+      (inv.chaveAcesso || xml.chaveAcesso || '').toLowerCase().includes(term) ||
+      (inv.protocoloAutorizacao || xml.protocoloAutorizacao || '').toLowerCase().includes(term) ||
+      (inv.transportadoraNome || xml.transportadoraNome || '').toLowerCase().includes(term) ||
+      (inv.produtoNcm || xml.produtoNcm || '').includes(term);
+    
+    const matchesOrigem = origemFilter === 'Todas' || inv.origem === origemFilter;
+    const matchesCor = corFilter === 'Todas' || (inv.cor || '').toLowerCase() === corFilter.toLowerCase();
+    const matchesUf = ufFilter === 'Todos' || inv.uf === ufFilter;
+
+    return matchesSearch && matchesOrigem && matchesCor && matchesUf;
+  });
 
   const handleSelectAll = () => {
     if (selectedIds.length === filteredInvoices.length) {
@@ -168,64 +131,6 @@ export const DatabaseView: React.FC<DatabaseViewProps> = ({ invoices, onRefreshD
       await api.bulkDeleteInvoices(selectedIds);
       setSelectedIds([]);
       onRefreshData();
-    }
-  };
-
-  const handleOpenBulkEditSelected = () => {
-    if (selectedIds.length === 0) return;
-    setBulkTargetIds(selectedIds);
-    setBulkEditForm({
-      cor: 'MANTER',
-      origem: 'MANTER',
-      quantidade: 'MANTER',
-      codigo: 'MANTER',
-      descricao: 'MANTER',
-      status: 'MANTER'
-    });
-    setIsBulkEditModalOpen(true);
-  };
-
-  const handleOpenBulkEditFiltered = () => {
-    if (filteredInvoices.length === 0) return;
-    setBulkTargetIds(filteredInvoices.map(i => i.id));
-    setBulkEditForm({
-      cor: 'MANTER',
-      origem: 'MANTER',
-      quantidade: 'MANTER',
-      codigo: 'MANTER',
-      descricao: 'MANTER',
-      status: 'MANTER'
-    });
-    setIsBulkEditModalOpen(true);
-  };
-
-  const handleApplyBulkEdit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (bulkTargetIds.length === 0) return;
-
-    try {
-      setIsBulkUpdating(true);
-      const updates: Partial<Invoice> = {};
-
-      if (bulkEditForm.cor !== 'MANTER') updates.cor = bulkEditForm.cor;
-      if (bulkEditForm.origem !== 'MANTER') updates.origem = bulkEditForm.origem;
-      if (bulkEditForm.quantidade !== 'MANTER') updates.quantidade = bulkEditForm.quantidade;
-      if (bulkEditForm.codigo !== 'MANTER' && bulkEditForm.codigo.trim() !== '') updates.codigo = bulkEditForm.codigo.trim();
-      if (bulkEditForm.descricao !== 'MANTER' && bulkEditForm.descricao.trim() !== '') updates.descricao = bulkEditForm.descricao.trim();
-      if (bulkEditForm.status !== 'MANTER') updates.status = bulkEditForm.status;
-
-      const res = await api.bulkUpdateInvoices(bulkTargetIds, updates);
-      setIsBulkEditModalOpen(false);
-      setBulkSuccessMsg(res.message || `${res.updatedCount} notas fiscais atualizadas em lote com sucesso!`);
-      setTimeout(() => setBulkSuccessMsg(null), 6000);
-      setSelectedIds([]);
-      onRefreshData();
-      playAttendanceChime();
-    } catch (err: any) {
-      alert(err.message || 'Erro ao aplicar edição em lote.');
-      playUrgentAlert();
-    } finally {
-      setIsBulkUpdating(false);
     }
   };
 
@@ -262,84 +167,42 @@ export const DatabaseView: React.FC<DatabaseViewProps> = ({ invoices, onRefreshD
     onRefreshData();
   };
 
-  const handleImportExcelFile = async () => {
-    if (!importFile) {
-      alert('Por favor, selecione um arquivo de planilha Excel (.xlsx).');
-      return;
-    }
-    setIsImporting(true);
-    setImportError(null);
-    setImportResult(null);
-
-    try {
-      const res = await api.importExcelInvoices(importFile);
-      setImportResult(res);
-      playAttendanceChime();
-      onRefreshData();
-    } catch (err: any) {
-      setImportError(err.message || 'Erro ao importar planilha Excel.');
-      playUrgentAlert();
-    } finally {
-      setIsImporting(false);
-    }
-  };
-
   return (
     <div className="space-y-6">
       
-      {/* Top Header Card */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-[#0f172a]/95 backdrop-blur-md border border-slate-800 p-4 sm:p-6 rounded-2xl shadow-xl">
+      {/* Header */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-white border border-slate-200 p-5 rounded-xl shadow-sm">
         <div>
-          <div className="flex items-center gap-2 mb-1">
-            <span className="px-2.5 py-0.5 rounded-full bg-cyan-500/10 text-cyan-400 border border-cyan-500/30 text-[10px] font-mono font-bold uppercase tracking-wider flex items-center gap-1">
-              <Database className="w-3 h-3" /> MySQL SPM Fiscal
-            </span>
-            <span className="px-2 py-0.5 rounded-full bg-slate-800 text-slate-300 border border-slate-700 text-[10px] font-mono">
-              17 Colunas Rigorosas
+          <div className="flex items-center gap-2 flex-wrap">
+            <h2 className="text-xl font-bold text-slate-900 tracking-tight flex items-center space-x-2">
+              <Database className="w-5 h-5 text-blue-600" />
+              <span>Base de Dados Fiscal SPM Store (XML SEFAZ Completo)</span>
+            </h2>
+            <span className="px-2.5 py-0.5 rounded-full text-[10px] font-extrabold bg-cyan-50 text-cyan-700 border border-cyan-200">
+              {filteredInvoices.length} {filteredInvoices.length === 1 ? 'Nota Fiscal' : 'Notas Fiscais'}
             </span>
           </div>
-          <h2 className="text-xl sm:text-2xl font-extrabold text-white tracking-tight">
-            Base de Dados & Registros Fiscais
-          </h2>
-          <p className="text-slate-400 text-xs mt-1">
-            Persistência no banco <code className="text-cyan-400 font-mono">spm_fiscal</code> (XAMPP) com sincronização em <code className="text-cyan-400 font-mono">database_spm_fiscal.sql</code>.
+          <p className="text-slate-500 text-xs mt-1">
+            Visualização analítica de todas as seções fiscais: Destinatário, Itens/SKU, Impostos, Totais, Transporte, Cobrança, Pagamento e Protocolo SEFAZ.
           </p>
         </div>
 
-        <div className="flex flex-wrap items-center gap-2">
-          {/* Botão Exportar Excel */}
+        <div className="flex items-center space-x-2 flex-wrap gap-y-2">
           <a
             href="/api/export/excel"
-            download="Auditoria_Faturamento_SPM.xlsx"
-            className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold transition shadow-lg shadow-emerald-600/20 border border-emerald-400/30"
-            title="Baixar planilha com todas as notas e colunas fiscais"
+            download="Auditoria_Completa_XML_SEFAZ_SPM.xlsx"
+            className="flex items-center space-x-1.5 px-3 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold transition shadow-sm"
+            title="Exportar todas as colunas XML SEFAZ em Excel"
           >
             <FileSpreadsheet className="w-4 h-4" />
-            <span>Exportar Excel (.xlsx)</span>
+            <span>Exportar Excel Completo</span>
           </a>
-
-          {/* Botão Importar & Atualizar Excel */}
-          {userRole !== 'AUDITOR' && (
-            <button
-              onClick={() => {
-                setImportFile(null);
-                setImportResult(null);
-                setImportError(null);
-                setIsImportExcelModalOpen(true);
-              }}
-              className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-blue-600 hover:bg-blue-500 text-white text-xs font-bold transition shadow-lg shadow-blue-600/20 border border-blue-400/30"
-              title="Importar planilha Excel para atualizar cor, quantidade e dados em lote"
-            >
-              <UploadCloud className="w-4 h-4" />
-              <span>Importar & Atualizar Excel</span>
-            </button>
-          )}
 
           {userRole !== 'AUDITOR' && (
             <>
               <button
                 onClick={() => setIsNewInvoiceModalOpen(true)}
-                className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-cyan-600 hover:bg-cyan-500 text-white text-xs font-bold transition shadow-lg shadow-cyan-600/20 border border-cyan-400/30"
+                className="flex items-center space-x-1.5 px-3 py-2 rounded-lg bg-blue-600 hover:bg-blue-500 text-white text-xs font-bold transition shadow-sm"
               >
                 <Plus className="w-4 h-4" />
                 <span>Nova Nota</span>
@@ -348,10 +211,10 @@ export const DatabaseView: React.FC<DatabaseViewProps> = ({ invoices, onRefreshD
               <button
                 onClick={() => setIsResetModalOpen(true)}
                 disabled={invoices.length === 0}
-                className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-rose-500/10 hover:bg-rose-500/20 border border-rose-500/30 text-rose-300 text-xs font-bold transition disabled:opacity-50"
+                className="flex items-center space-x-1.5 px-3 py-2 rounded-lg bg-rose-50 hover:bg-rose-100 border border-rose-200 text-rose-700 text-xs font-bold transition shadow-sm disabled:opacity-50"
                 title="Zerar todo o Banco de Dados"
               >
-                <Trash2 className="w-4 h-4 text-rose-400" />
+                <Trash2 className="w-4 h-4 text-rose-600" />
                 <span>Zerar Banco</span>
               </button>
             </>
@@ -360,161 +223,209 @@ export const DatabaseView: React.FC<DatabaseViewProps> = ({ invoices, onRefreshD
       </div>
 
       {resetSuccessMsg && (
-        <div className="p-4 rounded-xl bg-emerald-950/60 border border-emerald-500/40 text-emerald-300 text-xs flex items-center justify-between shadow-lg">
-          <div className="flex items-center gap-2">
-            <Check className="w-4 h-4 text-emerald-400 shrink-0" />
+        <div className="p-4 rounded-xl bg-emerald-50 border border-emerald-200 text-emerald-800 text-xs flex items-center justify-between shadow-sm">
+          <div className="flex items-center space-x-2">
+            <Check className="w-4 h-4 text-emerald-600 shrink-0" />
             <span className="font-semibold">{resetSuccessMsg}</span>
           </div>
-          <button onClick={() => setResetSuccessMsg(null)} className="text-slate-400 hover:text-white">
+          <button onClick={() => setResetSuccessMsg(null)} className="text-slate-400 hover:text-slate-700">
             <X className="w-4 h-4" />
           </button>
         </div>
       )}
 
-      {bulkSuccessMsg && (
-        <div className="p-4 rounded-xl bg-cyan-950/70 border border-cyan-500/40 text-cyan-200 text-xs flex items-center justify-between shadow-lg animate-in fade-in">
-          <div className="flex items-center gap-2">
-            <CheckCircle2 className="w-4 h-4 text-cyan-400 shrink-0" />
-            <span className="font-semibold">{bulkSuccessMsg}</span>
-          </div>
-          <button onClick={() => setBulkSuccessMsg(null)} className="text-slate-400 hover:text-white">
-            <X className="w-4 h-4" />
+      {/* Category Views Bar (SELETOR DE SEÇÕES XML) */}
+      <div className="bg-slate-900 border border-slate-800 p-2.5 rounded-xl flex items-center justify-between gap-2 overflow-x-auto shadow-sm">
+        <div className="flex items-center gap-1.5">
+          <span className="text-[10px] font-bold uppercase text-slate-400 px-2 flex items-center gap-1">
+            <LayoutGrid className="w-3.5 h-3.5 text-cyan-400" />
+            Visão de Colunas:
+          </span>
+
+          <button
+            onClick={() => setActiveCategory('all')}
+            className={`px-3 py-1.5 rounded-lg text-xs font-bold transition flex items-center gap-1.5 shrink-0 ${
+              activeCategory === 'all'
+                ? 'bg-cyan-500 text-slate-950 shadow-md font-black'
+                : 'text-slate-300 hover:bg-slate-800'
+            }`}
+          >
+            <Layers className="w-3.5 h-3.5" />
+            <span>🌟 Todas as Colunas XML</span>
+          </button>
+
+          <button
+            onClick={() => setActiveCategory('dest')}
+            className={`px-3 py-1.5 rounded-lg text-xs font-bold transition flex items-center gap-1.5 shrink-0 ${
+              activeCategory === 'dest'
+                ? 'bg-blue-500 text-white shadow-md'
+                : 'text-slate-300 hover:bg-slate-800'
+            }`}
+          >
+            <Building2 className="w-3.5 h-3.5" />
+            <span>Destinatário (&lt;dest&gt;)</span>
+          </button>
+
+          <button
+            onClick={() => setActiveCategory('prod')}
+            className={`px-3 py-1.5 rounded-lg text-xs font-bold transition flex items-center gap-1.5 shrink-0 ${
+              activeCategory === 'prod'
+                ? 'bg-purple-500 text-white shadow-md'
+                : 'text-slate-300 hover:bg-slate-800'
+            }`}
+          >
+            <Tag className="w-3.5 h-3.5" />
+            <span>Itens &amp; Estoque (&lt;det&gt;)</span>
+          </button>
+
+          <button
+            onClick={() => setActiveCategory('tax')}
+            className={`px-3 py-1.5 rounded-lg text-xs font-bold transition flex items-center gap-1.5 shrink-0 ${
+              activeCategory === 'tax'
+                ? 'bg-amber-500 text-slate-950 font-black shadow-md'
+                : 'text-slate-300 hover:bg-slate-800'
+            }`}
+          >
+            <Percent className="w-3.5 h-3.5" />
+            <span>Impostos (&lt;imposto&gt;)</span>
+          </button>
+
+          <button
+            onClick={() => setActiveCategory('total')}
+            className={`px-3 py-1.5 rounded-lg text-xs font-bold transition flex items-center gap-1.5 shrink-0 ${
+              activeCategory === 'total'
+                ? 'bg-emerald-500 text-slate-950 font-black shadow-md'
+                : 'text-slate-300 hover:bg-slate-800'
+            }`}
+          >
+            <DollarSign className="w-3.5 h-3.5" />
+            <span>Totais (&lt;total&gt;)</span>
+          </button>
+
+          <button
+            onClick={() => setActiveCategory('transp')}
+            className={`px-3 py-1.5 rounded-lg text-xs font-bold transition flex items-center gap-1.5 shrink-0 ${
+              activeCategory === 'transp'
+                ? 'bg-indigo-500 text-white shadow-md'
+                : 'text-slate-300 hover:bg-slate-800'
+            }`}
+          >
+            <Truck className="w-3.5 h-3.5" />
+            <span>Transporte (&lt;transp&gt;)</span>
+          </button>
+
+          <button
+            onClick={() => setActiveCategory('pay')}
+            className={`px-3 py-1.5 rounded-lg text-xs font-bold transition flex items-center gap-1.5 shrink-0 ${
+              activeCategory === 'pay'
+                ? 'bg-teal-500 text-slate-950 font-black shadow-md'
+                : 'text-slate-300 hover:bg-slate-800'
+            }`}
+          >
+            <CreditCard className="w-3.5 h-3.5" />
+            <span>Cobrança &amp; Pagamento</span>
+          </button>
+
+          <button
+            onClick={() => setActiveCategory('sefaz')}
+            className={`px-3 py-1.5 rounded-lg text-xs font-bold transition flex items-center gap-1.5 shrink-0 ${
+              activeCategory === 'sefaz'
+                ? 'bg-rose-500 text-white shadow-md'
+                : 'text-slate-300 hover:bg-slate-800'
+            }`}
+          >
+            <ShieldCheck className="w-3.5 h-3.5" />
+            <span>Protocolo &amp; Chave</span>
+          </button>
+
+          <button
+            onClick={() => setActiveCategory('standard')}
+            className={`px-3 py-1.5 rounded-lg text-xs font-bold transition flex items-center gap-1.5 shrink-0 ${
+              activeCategory === 'standard'
+                ? 'bg-slate-700 text-white shadow-md'
+                : 'text-slate-300 hover:bg-slate-800'
+            }`}
+          >
+            <span>📋 17 Colunas Padrão</span>
           </button>
         </div>
-      )}
-
-      {/* Filter and Search Bar */}
-      <div className="bg-[#0f172a]/95 backdrop-blur-md border border-slate-800 p-3 sm:p-4 rounded-2xl shadow-xl space-y-3">
-        <div className="flex flex-col md:flex-row items-center justify-between gap-3">
-          <div className="relative w-full md:w-80">
-            <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
-            <input
-              type="text"
-              placeholder="Buscar por nome, CPF, SKU, descrição, fatura..."
-              value={searchTerm}
-              onChange={e => setSearchTerm(e.target.value)}
-              className="w-full bg-[#020617] border border-slate-800 text-slate-200 text-xs rounded-xl pl-9 pr-3 py-2 focus:ring-1 focus:ring-cyan-500 focus:border-cyan-500 outline-none"
-            />
-          </div>
-
-          <div className="flex flex-wrap items-center gap-2 w-full md:w-auto">
-            {/* Marketplace Filter */}
-            <select
-              value={origemFilter}
-              onChange={e => setOrigemFilter(e.target.value)}
-              className="bg-[#020617] border border-slate-800 text-slate-200 text-xs rounded-xl px-3 py-2 outline-none focus:ring-1 focus:ring-cyan-500 font-sans"
-            >
-              <option value="Todas">Todos os Marketplaces</option>
-              <option value="Shopee">Shopee</option>
-              <option value="Mercado Livre">Mercado Livre</option>
-              <option value="WhatsApp">WhatsApp</option>
-              <option value="TikTok">TikTok</option>
-              <option value="Outros">Outros</option>
-            </select>
-
-            {/* Cor Filter */}
-            <select
-              value={corFilter}
-              onChange={e => setCorFilter(e.target.value)}
-              className="bg-[#020617] border border-slate-800 text-slate-200 text-xs rounded-xl px-3 py-2 outline-none focus:ring-1 focus:ring-cyan-500 font-sans"
-            >
-              <option value="Todas">Todas as Cores</option>
-              <option value="Preto">Preto</option>
-              <option value="Marrom">Marrom</option>
-              <option value="Incolor">Incolor</option>
-              <option value="Não identificada">Não identificada</option>
-            </select>
-
-            {/* UF Filter */}
-            <select
-              value={ufFilter}
-              onChange={e => setUfFilter(e.target.value)}
-              className="bg-[#020617] border border-slate-800 text-slate-200 text-xs rounded-xl px-3 py-2 outline-none focus:ring-1 focus:ring-cyan-500 font-mono font-bold"
-            >
-              <option value="Todos">Todos UFs</option>
-              {['SP', 'RJ', 'PR', 'MG', 'RS', 'SC', 'BA', 'PE', 'CE', 'DF', 'GO', 'ES', 'MT', 'MS'].map(u => (
-                <option key={u} value={u}>{u}</option>
-              ))}
-            </select>
-
-            {/* SKU Filter */}
-            <div className="flex items-center gap-1 bg-[#020617] border border-slate-800 rounded-xl px-2 py-1 shadow-inner">
-              <Barcode className="w-3.5 h-3.5 text-cyan-400 shrink-0" />
-              <select
-                value={skuFilter}
-                onChange={e => setSkuFilter(e.target.value)}
-                className="bg-transparent text-slate-200 text-xs outline-none focus:text-cyan-300 font-mono font-bold max-w-[170px] truncate cursor-pointer"
-                title="Filtrar notas pelo Código SKU do produto"
-              >
-                <option value="Todos" className="bg-slate-900 text-slate-200">Todos os SKUs ({uniqueSkus.length})</option>
-                {uniqueSkus.map(sku => (
-                  <option key={sku} value={sku} className="bg-slate-900 text-slate-200">{sku}</option>
-                ))}
-              </select>
-            </div>
-
-            {/* Botão para Editar Todos os Filtrados */}
-            {userRole !== 'AUDITOR' && filteredInvoices.length > 0 && (
-              <button
-                onClick={handleOpenBulkEditFiltered}
-                className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-purple-600/20 text-purple-300 border border-purple-500/40 hover:bg-purple-600/30 text-xs font-bold transition shadow-sm"
-                title={`Editar em lote todos os ${filteredInvoices.length} registros que atendem ao filtro atual`}
-              >
-                <SlidersHorizontal className="w-3.5 h-3.5 text-purple-400" />
-                <span>Editar {filteredInvoices.length} Filtrados</span>
-              </button>
-            )}
-          </div>
-        </div>
-
-        {/* Barra Flutuante de Seleção Múltipla */}
-        {selectedIds.length > 0 && (
-          <div className="pt-2 border-t border-slate-800/80 flex flex-wrap items-center justify-between gap-2 text-xs">
-            <div className="flex items-center gap-2 text-cyan-300 font-semibold">
-              <span className="w-2 h-2 rounded-full bg-cyan-400 animate-pulse"></span>
-              <span>{selectedIds.length} nota(s) selecionada(s) de {filteredInvoices.length} visíveis</span>
-            </div>
-
-            <div className="flex items-center gap-2">
-              {userRole !== 'AUDITOR' && (
-                <button
-                  onClick={handleOpenBulkEditSelected}
-                  className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl bg-gradient-to-r from-cyan-600 to-blue-600 hover:from-cyan-500 hover:to-blue-500 text-white text-xs font-bold transition shadow-md shadow-cyan-600/25"
-                >
-                  <SlidersHorizontal className="w-3.5 h-3.5" />
-                  <span>Editar Selecionados ({selectedIds.length})</span>
-                </button>
-              )}
-
-              {userRole !== 'AUDITOR' && (
-                <button
-                  onClick={handleBulkDelete}
-                  className="flex items-center gap-1 px-3 py-1.5 rounded-xl bg-rose-500/20 text-rose-300 border border-rose-500/40 hover:bg-rose-500/30 text-xs font-bold transition shrink-0"
-                >
-                  <Trash2 className="w-3.5 h-3.5" />
-                  <span>Excluir ({selectedIds.length})</span>
-                </button>
-              )}
-
-              <button
-                onClick={() => setSelectedIds([])}
-                className="px-2.5 py-1.5 rounded-xl bg-slate-800 text-slate-400 hover:text-white text-xs transition border border-slate-700"
-              >
-                Desmarcar
-              </button>
-            </div>
-          </div>
-        )}
       </div>
 
-      {/* Main Invoices Table (17 Campos) */}
-      <div className="bg-[#0f172a]/95 backdrop-blur-md border border-slate-800 rounded-2xl shadow-xl overflow-hidden">
-        <div className="overflow-x-auto">
-          <table className="w-full text-left text-xs whitespace-nowrap">
-            <thead className="bg-[#020617] text-slate-400 font-mono uppercase text-[10px] tracking-wider border-b border-slate-800">
+      {/* Filter and Search Bar */}
+      <div className="bg-white border border-slate-200 p-4 rounded-xl shadow-sm flex flex-col md:flex-row items-center justify-between gap-3">
+        <div className="relative w-full md:w-96">
+          <input
+            type="text"
+            placeholder="Buscar por Nome, CPF, Fatura, Chave 44 dígitos, SKU, Cidade..."
+            value={searchTerm}
+            onChange={e => setSearchTerm(e.target.value)}
+            className="w-full bg-slate-50 border border-slate-200 text-slate-800 text-xs rounded-lg pl-8 pr-3 py-2 focus:ring-2 focus:ring-blue-600 focus:bg-white outline-none"
+          />
+          <Search className="w-3.5 h-3.5 text-slate-400 absolute left-2.5 top-2.5" />
+        </div>
+
+        <div className="flex items-center space-x-2 w-full md:w-auto overflow-x-auto">
+          {/* Marketplace Filter */}
+          <select
+            value={origemFilter}
+            onChange={e => setOrigemFilter(e.target.value)}
+            className="bg-slate-50 border border-slate-200 text-slate-800 text-xs rounded-lg px-3 py-2 outline-none focus:ring-2 focus:ring-blue-600 font-medium"
+          >
+            <option value="Todas">Todos os Marketplaces</option>
+            <option value="Shopee">Shopee</option>
+            <option value="Mercado Livre">Mercado Livre</option>
+            <option value="Amazon">Amazon</option>
+            <option value="Magalu">Magalu</option>
+            <option value="TikTok Shop">TikTok Shop</option>
+            <option value="WhatsApp">WhatsApp</option>
+            <option value="Outros">Outros</option>
+          </select>
+
+          {/* Cor Filter */}
+          <select
+            value={corFilter}
+            onChange={e => setCorFilter(e.target.value)}
+            className="bg-slate-50 border border-slate-200 text-slate-800 text-xs rounded-lg px-3 py-2 outline-none focus:ring-2 focus:ring-blue-600 font-medium"
+          >
+            <option value="Todas">Todas as Cores</option>
+            <option value="Preto">Preto</option>
+            <option value="Marrom">Marrom</option>
+            <option value="Incolor">Incolor</option>
+            <option value="Não identificada">Não identificada</option>
+          </select>
+
+          {/* UF Filter */}
+          <select
+            value={ufFilter}
+            onChange={e => setUfFilter(e.target.value)}
+            className="bg-slate-50 border border-slate-200 text-slate-800 text-xs rounded-lg px-3 py-2 outline-none focus:ring-2 focus:ring-blue-600 font-medium"
+          >
+            <option value="Todos">Todos UFs</option>
+            {['SP', 'RJ', 'PR', 'MG', 'RS', 'SC', 'BA', 'PE', 'CE', 'DF', 'ES', 'GO', 'MT', 'MS', 'PA', 'PB', 'RN', 'AM', 'AL', 'SE', 'PI', 'MA', 'RO', 'TO', 'AC', 'AP', 'RR'].map(u => (
+              <option key={u} value={u}>{u}</option>
+            ))}
+          </select>
+
+          {selectedIds.length > 0 && userRole !== 'AUDITOR' && (
+            <button
+              onClick={handleBulkDelete}
+              className="flex items-center space-x-1 px-3 py-2 rounded-lg bg-rose-50 text-rose-700 border border-rose-200 hover:bg-rose-100 text-xs font-bold transition shrink-0"
+            >
+              <Trash2 className="w-3.5 h-3.5" />
+              <span>Excluir ({selectedIds.length})</span>
+            </button>
+          )}
+        </div>
+      </div>
+
+      {/* Main Invoices Table (XML SEFAZ COMPLETO) */}
+      <div className="bg-white border border-slate-200 rounded-xl shadow-sm overflow-hidden">
+        <div className="overflow-x-auto max-h-[72vh] overflow-y-auto">
+          <table className="w-full text-left text-xs text-slate-700 whitespace-nowrap">
+            <thead className="bg-slate-900 text-white uppercase text-[10px] tracking-wider border-b border-slate-800 font-bold sticky top-0 z-20 shadow-sm">
               <tr>
-                <th className="p-3.5 w-10 text-center">
-                  <button onClick={handleSelectAll} className="text-slate-400 hover:text-cyan-400">
+                <th className="p-3.5 w-10 text-center bg-slate-950 sticky left-0 z-30">
+                  <button onClick={handleSelectAll} className="text-slate-400 hover:text-white">
                     {selectedIds.length === filteredInvoices.length && filteredInvoices.length > 0 ? (
                       <CheckSquare className="w-4 h-4 text-cyan-400" />
                     ) : (
@@ -522,102 +433,313 @@ export const DatabaseView: React.FC<DatabaseViewProps> = ({ invoices, onRefreshD
                     )}
                   </button>
                 </th>
-                <th className="p-3.5">NF / FATURA</th>
-                <th className="p-3.5">NOME / CLIENTE</th>
-                <th className="p-3.5">CPF / CNPJ</th>
-                <th className="p-3.5">DATA NF-e</th>
-                <th className="p-3.5">CIDADE / UF</th>
-                <th className="p-3.5">CÓDIGO (SKU)</th>
-                <th className="p-3.5 text-center">QTD</th>
-                <th className="p-3.5">DESCRIÇÃO</th>
-                <th className="p-3.5">COR</th>
-                <th className="p-3.5">MARKETPLACE</th>
-                <th className="p-3.5 text-right">PRODUTOS</th>
-                <th className="p-3.5 text-right">DESCONTO</th>
-                <th className="p-3.5 text-right">VALOR FINAL</th>
-                <th className="p-3.5 text-center">AÇÕES</th>
+
+                {/* 1. GERAL & CONTROLE */}
+                <th className="p-3.5 bg-slate-900 text-cyan-300">FATURA / NF-e</th>
+                <th className="p-3.5 bg-slate-900 text-slate-300">MARKETPLACE</th>
+                <th className="p-3.5 bg-slate-900 text-slate-300">DATA EMISSÃO</th>
+
+                {/* 2. DESTINATÁRIO (<dest>, <enderDest>) */}
+                {(activeCategory === 'all' || activeCategory === 'dest' || activeCategory === 'standard') && (
+                  <>
+                    <th className="p-3.5 bg-blue-950 text-blue-300 border-l border-blue-900">DESTINATÁRIO</th>
+                    <th className="p-3.5 bg-blue-950 text-blue-300">CPF / CNPJ</th>
+                    <th className="p-3.5 bg-blue-950 text-blue-300">CIDADE / UF</th>
+                    <th className="p-3.5 bg-blue-950 text-blue-300">ENDEREÇO</th>
+                    <th className="p-3.5 bg-blue-950 text-blue-300">BAIRRO</th>
+                    <th className="p-3.5 bg-blue-950 text-blue-300">CEP</th>
+                    {activeCategory !== 'standard' && (
+                      <>
+                        <th className="p-3.5 bg-blue-950 text-blue-300">IE DEST</th>
+                        <th className="p-3.5 bg-blue-950 text-blue-300">E-MAIL</th>
+                        <th className="p-3.5 bg-blue-950 text-blue-300">CÓD IBGE</th>
+                      </>
+                    )}
+                  </>
+                )}
+
+                {/* 3. PRODUTOS & ITENS (<det>, <prod>) */}
+                {(activeCategory === 'all' || activeCategory === 'prod' || activeCategory === 'standard') && (
+                  <>
+                    <th className="p-3.5 bg-purple-950 text-purple-300 border-l border-purple-900">SKU / CÓDIGO</th>
+                    <th className="p-3.5 bg-purple-950 text-purple-300">DESCRIÇÃO DO PRODUTO</th>
+                    <th className="p-3.5 bg-purple-950 text-purple-300">COR</th>
+                    <th className="p-3.5 bg-purple-950 text-purple-300 text-center">QTD</th>
+                    {activeCategory !== 'standard' && (
+                      <>
+                        <th className="p-3.5 bg-purple-950 text-purple-300">NCM</th>
+                        <th className="p-3.5 bg-purple-950 text-purple-300">CFOP</th>
+                        <th className="p-3.5 bg-purple-950 text-purple-300">UN</th>
+                        <th className="p-3.5 bg-purple-950 text-purple-300 text-right">VALOR UNIT.</th>
+                      </>
+                    )}
+                    <th className="p-3.5 bg-purple-950 text-purple-300 text-right">TOTAL PROD</th>
+                    <th className="p-3.5 bg-purple-950 text-purple-300 text-right">DESCONTO</th>
+                    <th className="p-3.5 bg-purple-950 text-purple-300 text-right font-black text-emerald-400">VALOR FINAL</th>
+                  </>
+                )}
+
+                {/* 4. IMPOSTOS (<imposto>) */}
+                {(activeCategory === 'all' || activeCategory === 'tax') && (
+                  <>
+                    <th className="p-3.5 bg-amber-950 text-amber-300 border-l border-amber-900">ICMS CST/CSOSN</th>
+                    <th className="p-3.5 bg-amber-950 text-amber-300 text-right">BASE ICMS</th>
+                    <th className="p-3.5 bg-amber-950 text-amber-300 text-right">VALOR ICMS</th>
+                    <th className="p-3.5 bg-amber-950 text-amber-300">PIS CST</th>
+                    <th className="p-3.5 bg-amber-950 text-amber-300 text-right">VALOR PIS</th>
+                    <th className="p-3.5 bg-amber-950 text-amber-300">COFINS CST</th>
+                    <th className="p-3.5 bg-amber-950 text-amber-300 text-right">VALOR COFINS</th>
+                    <th className="p-3.5 bg-amber-950 text-amber-300 text-right">TRIB. APROX</th>
+                  </>
+                )}
+
+                {/* 5. TOTAIS (<total>) */}
+                {(activeCategory === 'all' || activeCategory === 'total') && (
+                  <>
+                    <th className="p-3.5 bg-emerald-950 text-emerald-300 border-l border-emerald-900 text-right">TOTAL PRODUTOS</th>
+                    <th className="p-3.5 bg-emerald-950 text-emerald-300 text-right">FRETE</th>
+                    <th className="p-3.5 bg-emerald-950 text-emerald-300 text-right">DESCONTO TOTAL</th>
+                    <th className="p-3.5 bg-emerald-950 text-emerald-400 text-right font-black">VALOR NOTA (vNF)</th>
+                  </>
+                )}
+
+                {/* 6. TRANSPORTE (<transp>) */}
+                {(activeCategory === 'all' || activeCategory === 'transp') && (
+                  <>
+                    <th className="p-3.5 bg-indigo-950 text-indigo-300 border-l border-indigo-900">MODALIDADE FRETE</th>
+                    <th className="p-3.5 bg-indigo-950 text-indigo-300">TRANSPORTADORA</th>
+                    <th className="p-3.5 bg-indigo-950 text-indigo-300">CNPJ TRANSP</th>
+                    <th className="p-3.5 bg-indigo-950 text-indigo-300 text-center">VOLUMES</th>
+                    <th className="p-3.5 bg-indigo-950 text-indigo-300 text-right">PESO BRUTO (KG)</th>
+                  </>
+                )}
+
+                {/* 7. COBRANÇA & PAGAMENTO (<cobr>, <pag>, <infIntermed>) */}
+                {(activeCategory === 'all' || activeCategory === 'pay') && (
+                  <>
+                    <th className="p-3.5 bg-teal-950 text-teal-300 border-l border-teal-900">FORMA PAGAMENTO</th>
+                    <th className="p-3.5 bg-teal-950 text-teal-300 text-right">VALOR PAGO</th>
+                    <th className="p-3.5 bg-teal-950 text-teal-300">PARCELAS / VENC</th>
+                    <th className="p-3.5 bg-teal-950 text-teal-300">CNPJ INTERMEDIADOR</th>
+                  </>
+                )}
+
+                {/* 8. PROTOCOLO & SEFAZ (<infProt>, <ide>) */}
+                {(activeCategory === 'all' || activeCategory === 'sefaz') && (
+                  <>
+                    <th className="p-3.5 bg-rose-950 text-rose-300 border-l border-rose-900">CHAVE DE ACESSO (44 DÍGITOS)</th>
+                    <th className="p-3.5 bg-rose-950 text-rose-300">STATUS SEFAZ</th>
+                    <th className="p-3.5 bg-rose-950 text-rose-300">Nº PROTOCOLO</th>
+                  </>
+                )}
+
+                <th className="p-3.5 text-center bg-slate-950 sticky right-0 z-30">AÇÕES</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-slate-800/60 font-sans">
+
+            <tbody className="divide-y divide-slate-100 font-sans">
               {filteredInvoices.length === 0 ? (
                 <tr>
-                  <td colSpan={18} className="p-10 text-center text-slate-500 font-mono text-xs">
-                    Nenhuma nota fiscal encontrada com os filtros selecionados.
+                  <td colSpan={40} className="p-10 text-center text-slate-500">
+                    <div className="flex flex-col items-center justify-center space-y-2">
+                      <Search className="w-8 h-8 text-slate-300" />
+                      <p className="font-bold text-slate-700">Nenhum registro fiscal encontrado.</p>
+                      <p className="text-xs text-slate-400">Tente ajustar os termos de pesquisa ou os filtros de marketplace/cor/UF.</p>
+                    </div>
                   </td>
                 </tr>
               ) : (
                 filteredInvoices.map((inv) => {
                   const isSelected = selectedIds.includes(inv.id);
+                  const xml = inv.xmlDetails || {};
+                  const chave = inv.chaveAcesso || xml.chaveAcesso;
+
                   return (
                     <tr 
                       key={inv.id} 
-                      className={`hover:bg-slate-800/40 transition ${isSelected ? 'bg-cyan-950/20' : ''}`}
+                      className={`hover:bg-slate-50/80 transition ${isSelected ? 'bg-cyan-50/50' : ''}`}
                     >
-                      <td className="p-3.5 text-center">
-                        <button onClick={() => handleToggleSelect(inv.id)} className="text-slate-400 hover:text-cyan-400">
+                      {/* Checkbox */}
+                      <td className="p-3.5 text-center bg-white sticky left-0 z-10">
+                        <button onClick={() => handleToggleSelect(inv.id)} className="text-slate-400 hover:text-slate-700">
                           {isSelected ? (
-                            <CheckSquare className="w-4 h-4 text-cyan-400" />
+                            <CheckSquare className="w-4 h-4 text-cyan-600" />
                           ) : (
                             <Square className="w-4 h-4" />
                           )}
                         </button>
                       </td>
 
-                      <td className="p-3.5 font-mono font-bold text-cyan-400">
-                        #{inv.fatura || inv.id}
-                      </td>
-                      <td className="p-3.5 font-bold text-white max-w-[180px] truncate">{inv.nome}</td>
-                      <td className="p-3.5 font-mono text-[11px] text-slate-400">{inv.documento}</td>
-                      <td className="p-3.5 font-mono text-slate-400">{inv.dataSaida}</td>
-                      <td className="p-3.5 text-slate-300 font-medium">{inv.municipio} - {inv.uf}</td>
-                      
-                      <td className="p-3.5 font-mono text-slate-300 font-semibold">{inv.codigo}</td>
-                      <td className="p-3.5 text-center font-mono font-bold text-white">{inv.quantidade}</td>
-                      <td className="p-3.5 text-slate-300 max-w-[180px] truncate" title={inv.descricao}>{inv.descricao}</td>
-
-                      <td className="p-3.5">
-                        <span className={`px-2 py-0.5 rounded text-[10px] font-bold border ${
-                          inv.cor.toLowerCase() === 'preto' ? 'bg-slate-950 text-white border-slate-700' :
-                          inv.cor.toLowerCase() === 'marrom' ? 'bg-amber-950 text-amber-300 border-amber-700' :
-                          inv.cor.toLowerCase() === 'incolor' ? 'bg-cyan-950 text-cyan-300 border-cyan-700' :
-                          'bg-slate-800 text-slate-400 border-slate-700'
-                        }`}>
-                          {inv.cor}
-                        </span>
+                      {/* 1. GERAL */}
+                      <td className="p-3.5 font-mono text-xs font-bold text-slate-900 flex items-center gap-1.5">
+                        <span>{inv.fatura || 'N/A'}</span>
+                        {(inv.serie || xml.serie) && (
+                          <span className="text-[9px] px-1 py-0.2 rounded bg-slate-100 text-slate-500 font-mono">
+                            S.{inv.serie || xml.serie}
+                          </span>
+                        )}
                       </td>
 
                       <td className="p-3.5">
-                        <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-slate-800 text-slate-200 border border-slate-700">
-                          {inv.origem}
+                        <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-blue-50 text-blue-700 border border-blue-200">
+                          {inv.origem || 'Outros'}
                         </span>
                       </td>
 
-                      <td className="p-3.5 text-right font-mono text-slate-400">R$ {inv.valorProdutos}</td>
-                      <td className="p-3.5 text-right font-mono text-rose-400">R$ {inv.desconto}</td>
-                      <td className="p-3.5 text-right font-mono font-bold text-emerald-400">R$ {inv.valorNota}</td>
+                      <td className="p-3.5 text-slate-500 font-mono text-[11px]">{inv.dataSaida}</td>
 
-                      <td className="p-3.5 text-center">
-                        <div className="flex items-center justify-center gap-1">
+                      {/* 2. DESTINATÁRIO */}
+                      {(activeCategory === 'all' || activeCategory === 'dest' || activeCategory === 'standard') && (
+                        <>
+                          <td className="p-3.5 font-bold text-slate-900 border-l border-slate-100 max-w-[200px] truncate" title={inv.nome}>
+                            {inv.nome}
+                          </td>
+                          <td className="p-3.5 font-mono text-[11px] text-slate-600">{inv.documento}</td>
+                          <td className="p-3.5 text-slate-800 font-medium">{inv.municipio} - {inv.uf}</td>
+                          <td className="p-3.5 text-slate-600 max-w-[180px] truncate" title={inv.endereco}>{inv.endereco}</td>
+                          <td className="p-3.5 text-slate-600">{inv.bairro}</td>
+                          <td className="p-3.5 font-mono text-[11px] text-slate-500">{inv.cep}</td>
+                          {activeCategory !== 'standard' && (
+                            <>
+                              <td className="p-3.5 font-mono text-[11px] text-slate-500">{inv.destinatarioIe || xml.destinatarioIe || 'ISENTO'}</td>
+                              <td className="p-3.5 font-mono text-[11px] text-slate-500 max-w-[150px] truncate">{inv.destinatarioEmail || xml.destinatarioEmail || '-'}</td>
+                              <td className="p-3.5 font-mono text-[11px] text-slate-500">{inv.destinatarioCodigoMunicipio || xml.destinatarioCodigoMunicipio || '-'}</td>
+                            </>
+                          )}
+                        </>
+                      )}
+
+                      {/* 3. PRODUTOS & ITENS */}
+                      {(activeCategory === 'all' || activeCategory === 'prod' || activeCategory === 'standard') && (
+                        <>
+                          <td className="p-3.5 font-mono text-slate-900 font-bold border-l border-slate-100">{inv.codigo}</td>
+                          <td className="p-3.5 text-slate-700 max-w-[220px] truncate font-medium" title={inv.descricao}>{inv.descricao}</td>
+                          <td className="p-3.5">
+                            <span className={`px-2 py-0.5 rounded text-[10px] font-bold border ${
+                              (inv.cor || '').toLowerCase() === 'preto' ? 'bg-slate-900 text-white border-slate-900' :
+                              (inv.cor || '').toLowerCase() === 'marrom' ? 'bg-amber-100 text-amber-900 border-amber-300' :
+                              (inv.cor || '').toLowerCase() === 'incolor' ? 'bg-cyan-50 text-cyan-800 border-cyan-200' :
+                              'bg-slate-100 text-slate-600 border-slate-200'
+                            }`}>
+                              {inv.cor || 'Não identificada'}
+                            </span>
+                          </td>
+                          <td className="p-3.5 text-center font-extrabold text-slate-900">{inv.quantidade}</td>
+                          {activeCategory !== 'standard' && (
+                            <>
+                              <td className="p-3.5 font-mono text-[11px] text-slate-500">{inv.produtoNcm || xml.produtoNcm || '32089010'}</td>
+                              <td className="p-3.5 font-mono text-[11px] text-slate-500">{inv.produtoCfop || xml.produtoCfop || '5102'}</td>
+                              <td className="p-3.5 font-mono text-[11px] text-slate-500">{inv.produtoUnidade || xml.produtoUnidade || 'UN'}</td>
+                              <td className="p-3.5 text-right font-mono text-slate-600">R$ {inv.produtoValorUnitario || xml.produtoValorUnitario || inv.valorProdutos}</td>
+                            </>
+                          )}
+                          <td className="p-3.5 text-right font-mono text-slate-700">R$ {inv.valorProdutos}</td>
+                          <td className="p-3.5 text-right font-mono text-rose-600">R$ {inv.desconto}</td>
+                          <td className="p-3.5 text-right font-mono font-black text-emerald-600 text-xs">R$ {inv.valorNota}</td>
+                        </>
+                      )}
+
+                      {/* 4. IMPOSTOS */}
+                      {(activeCategory === 'all' || activeCategory === 'tax') && (
+                        <>
+                          <td className="p-3.5 font-mono text-slate-700 border-l border-slate-100">{inv.icmsCstCsosn || xml.icmsCstCsosn || '102'}</td>
+                          <td className="p-3.5 text-right font-mono text-slate-600">R$ {inv.totalBaseIcms || xml.totalBaseIcms || inv.valorProdutos}</td>
+                          <td className="p-3.5 text-right font-mono text-slate-600">R$ {inv.totalValorIcms || xml.totalValorIcms || '0,00'}</td>
+                          <td className="p-3.5 font-mono text-slate-500">{inv.pisCst || xml.pisCst || '07'}</td>
+                          <td className="p-3.5 text-right font-mono text-slate-600">R$ {inv.totalPis || xml.totalPis || '0,00'}</td>
+                          <td className="p-3.5 font-mono text-slate-500">{inv.cofinsCst || xml.cofinsCst || '07'}</td>
+                          <td className="p-3.5 text-right font-mono text-slate-600">R$ {inv.totalCofins || xml.totalCofins || '0,00'}</td>
+                          <td className="p-3.5 text-right font-mono font-bold text-amber-700">R$ {inv.totalTributosAprox || xml.totalTributosAprox || '0,00'}</td>
+                        </>
+                      )}
+
+                      {/* 5. TOTAIS */}
+                      {(activeCategory === 'all' || activeCategory === 'total') && (
+                        <>
+                          <td className="p-3.5 text-right font-mono text-slate-700 border-l border-slate-100">R$ {inv.totalProdutos || xml.totalProdutos || inv.valorProdutos}</td>
+                          <td className="p-3.5 text-right font-mono text-slate-500">R$ {inv.totalFrete || xml.totalFrete || '0,00'}</td>
+                          <td className="p-3.5 text-right font-mono text-rose-600">R$ {inv.desconto}</td>
+                          <td className="p-3.5 text-right font-mono font-black text-emerald-600 text-xs">R$ {inv.valorNota}</td>
+                        </>
+                      )}
+
+                      {/* 6. TRANSPORTE */}
+                      {(activeCategory === 'all' || activeCategory === 'transp') && (
+                        <>
+                          <td className="p-3.5 text-slate-700 border-l border-slate-100 max-w-[140px] truncate" title={inv.transporteModalidadeFrete || xml.transporteModalidadeFrete}>
+                            {inv.transporteModalidadeFrete || xml.transporteModalidadeFrete || '0 - CIF'}
+                          </td>
+                          <td className="p-3.5 font-bold text-slate-800 max-w-[180px] truncate" title={inv.transportadoraNome || xml.transportadoraNome}>
+                            {inv.transportadoraNome || xml.transportadoraNome || 'Correios / Mercado Envios'}
+                          </td>
+                          <td className="p-3.5 font-mono text-[11px] text-slate-500">{inv.transportadoraCnpjDoc || xml.transportadoraCnpjDoc || '-'}</td>
+                          <td className="p-3.5 text-center font-mono">{inv.transporteVolumeQuantidade || xml.transporteVolumeQuantidade || '1'}</td>
+                          <td className="p-3.5 text-right font-mono text-slate-600">{inv.transporteVolumePesoBruto || xml.transporteVolumePesoBruto || '0,300'}</td>
+                        </>
+                      )}
+
+                      {/* 7. COBRANÇA & PAGAMENTO */}
+                      {(activeCategory === 'all' || activeCategory === 'pay') && (
+                        <>
+                          <td className="p-3.5 font-bold text-teal-800 border-l border-slate-100">
+                            {inv.pagamentoForma || xml.pagamentoForma || '17 - PIX'}
+                          </td>
+                          <td className="p-3.5 text-right font-mono font-bold text-slate-800">R$ {inv.valorNota}</td>
+                          <td className="p-3.5 text-slate-600 text-[11px] max-w-[150px] truncate" title={inv.cobrancaDuplicatasResumo || xml.cobrancaDuplicatasResumo}>
+                            {inv.cobrancaDuplicatasResumo || xml.cobrancaDuplicatasResumo || 'À Vista'}
+                          </td>
+                          <td className="p-3.5 font-mono text-[11px] text-slate-500">{inv.intermediadorCnpj || xml.intermediadorCnpj || '-'}</td>
+                        </>
+                      )}
+
+                      {/* 8. SEFAZ & CHAVE */}
+                      {(activeCategory === 'all' || activeCategory === 'sefaz') && (
+                        <>
+                          <td className="p-3.5 font-mono text-[11px] text-slate-700 border-l border-slate-100 max-w-[200px] truncate">
+                            {chave ? (
+                              <div className="flex items-center gap-1.5">
+                                <span className="truncate select-all" title={chave}>{chave}</span>
+                                <button
+                                  onClick={() => handleCopyText(chave, inv.id)}
+                                  className="text-slate-400 hover:text-cyan-600 shrink-0"
+                                  title="Copiar Chave de 44 Dígitos"
+                                >
+                                  {copiedKey === inv.id ? <Check className="w-3.5 h-3.5 text-emerald-600" /> : <Copy className="w-3.5 h-3.5" />}
+                                </button>
+                              </div>
+                            ) : '-'}
+                          </td>
+                          <td className="p-3.5 text-slate-700 text-[11px]">
+                            <span className="px-1.5 py-0.5 rounded bg-emerald-50 text-emerald-700 border border-emerald-200 text-[10px] font-bold">
+                              {inv.statusSefaz || xml.statusSefaz || '100 - Autorizado'}
+                            </span>
+                          </td>
+                          <td className="p-3.5 font-mono text-[11px] text-slate-500">{inv.protocoloAutorizacao || xml.protocoloAutorizacao || '-'}</td>
+                        </>
+                      )}
+
+                      {/* Ações */}
+                      <td className="p-3.5 text-center bg-white sticky right-0 z-10">
+                        <div className="flex items-center justify-center space-x-1">
                           <button
-                            onClick={() => setViewingDanfeInvoice(inv)}
-                            className="p-1.5 rounded-lg hover:bg-slate-800 text-cyan-400 hover:text-cyan-300 transition"
-                            title="Ver Espelho DANFE"
+                            onClick={() => setSelectedDetailInvoice(inv)}
+                            className="p-1.5 rounded hover:bg-cyan-50 text-slate-500 hover:text-cyan-600 transition"
+                            title="Ver Detalhes Fiscais / XML SEFAZ"
                           >
-                            <Eye className="w-3.5 h-3.5" />
+                            <FileText className="w-3.5 h-3.5 text-cyan-600" />
                           </button>
-
                           {userRole !== 'AUDITOR' && (
                             <>
                               <button
                                 onClick={() => setEditingInvoice(inv)}
-                                className="p-1.5 rounded-lg hover:bg-slate-800 text-slate-400 hover:text-cyan-400 transition"
+                                className="p-1.5 rounded hover:bg-slate-100 text-slate-500 hover:text-blue-600 transition"
                                 title="Editar Nota Fiscal"
                               >
                                 <Edit3 className="w-3.5 h-3.5" />
                               </button>
                               <button
                                 onClick={() => handleDeleteInvoice(inv.id)}
-                                className="p-1.5 rounded-lg hover:bg-slate-800 text-slate-400 hover:text-rose-400 transition"
+                                className="p-1.5 rounded hover:bg-slate-100 text-slate-500 hover:text-rose-600 transition"
                                 title="Excluir Nota Fiscal"
                               >
                                 <Trash2 className="w-3.5 h-3.5" />
@@ -635,283 +757,219 @@ export const DatabaseView: React.FC<DatabaseViewProps> = ({ invoices, onRefreshD
         </div>
       </div>
 
-      {/* DANFE Mirror Modal */}
-      {viewingDanfeInvoice && (
-        <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-md z-50 flex items-center justify-center p-4">
-          <div className="bg-[#0f172a] border border-cyan-500/40 rounded-2xl w-full max-w-2xl p-6 shadow-2xl space-y-4 max-h-[90vh] overflow-y-auto">
-            <div className="flex items-center justify-between border-b border-slate-800 pb-3">
-              <div className="flex items-center gap-2">
-                <span className="p-1.5 rounded-lg bg-cyan-500/10 text-cyan-400 border border-cyan-500/30">
-                  <Database className="w-4 h-4" />
-                </span>
-                <h3 className="font-bold text-white text-base">Espelho DANFE NF #{viewingDanfeInvoice.fatura || viewingDanfeInvoice.id}</h3>
-              </div>
-              <button onClick={() => setViewingDanfeInvoice(null)} className="text-slate-400 hover:text-white">
-                <X className="w-5 h-5" />
-              </button>
-            </div>
-
-            <div className="bg-[#020617] p-4 rounded-xl border border-slate-800 space-y-3 text-xs">
-              <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 pb-3 border-b border-slate-800">
-                <div>
-                  <span className="text-slate-500 uppercase text-[10px] block">Destinatário:</span>
-                  <span className="font-bold text-white">{viewingDanfeInvoice.nome}</span>
-                </div>
-                <div>
-                  <span className="text-slate-500 uppercase text-[10px] block">CPF / CNPJ:</span>
-                  <span className="font-mono text-cyan-400">{viewingDanfeInvoice.documento}</span>
-                </div>
-                <div>
-                  <span className="text-slate-500 uppercase text-[10px] block">Data Emissão:</span>
-                  <span className="font-mono text-slate-300">{viewingDanfeInvoice.dataSaida}</span>
-                </div>
-              </div>
-
-              <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 pb-3 border-b border-slate-800">
-                <div className="col-span-2">
-                  <span className="text-slate-500 uppercase text-[10px] block">Endereço Completo:</span>
-                  <span className="text-slate-200">{viewingDanfeInvoice.endereco} - {viewingDanfeInvoice.bairro}</span>
-                </div>
-                <div>
-                  <span className="text-slate-500 uppercase text-[10px] block">CEP & Cidade:</span>
-                  <span className="text-slate-200">{viewingDanfeInvoice.cep} | {viewingDanfeInvoice.municipio}/{viewingDanfeInvoice.uf}</span>
-                </div>
-              </div>
-
-              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-                <div>
-                  <span className="text-slate-500 uppercase text-[10px] block">SKU / Código:</span>
-                  <span className="font-mono font-bold text-slate-200">{viewingDanfeInvoice.codigo}</span>
-                </div>
-                <div>
-                  <span className="text-slate-500 uppercase text-[10px] block">Cor:</span>
-                  <span className="font-bold text-amber-300">{viewingDanfeInvoice.cor}</span>
-                </div>
-                <div>
-                  <span className="text-slate-500 uppercase text-[10px] block">Canal:</span>
-                  <span className="font-bold text-cyan-300">{viewingDanfeInvoice.origem}</span>
-                </div>
-                <div>
-                  <span className="text-slate-500 uppercase text-[10px] block">Valor Total:</span>
-                  <span className="font-mono font-bold text-emerald-400 text-sm">R$ {viewingDanfeInvoice.valorNota}</span>
-                </div>
-              </div>
-            </div>
-
-            <div className="flex justify-end pt-2">
-              <button
-                onClick={() => setViewingDanfeInvoice(null)}
-                className="px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-white text-xs font-bold border border-slate-700"
-              >
-                Fechar
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Edit Invoice Modal (17 campos) */}
+      {/* Edit Invoice Modal */}
       {editingInvoice && (
-        <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-md z-50 flex items-center justify-center p-4">
-          <div className="bg-[#0f172a] border border-cyan-500/40 rounded-2xl w-full max-w-3xl p-6 shadow-2xl space-y-4 max-h-[90vh] overflow-y-auto">
-            <div className="flex items-center justify-between border-b border-slate-800 pb-3">
-              <h3 className="font-bold text-white text-base">Editar Registro Fiscal #{editingInvoice.id}</h3>
-              <button onClick={() => setEditingInvoice(null)} className="text-slate-400 hover:text-white">
+        <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="bg-white border border-slate-200 rounded-2xl w-full max-w-3xl p-6 shadow-2xl space-y-4 max-h-[90vh] overflow-y-auto">
+            <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+              <h3 className="font-bold text-slate-900 text-base">Editar Registro Fiscal #{editingInvoice.id}</h3>
+              <button onClick={() => setEditingInvoice(null)} className="text-slate-400 hover:text-slate-700">
                 <X className="w-5 h-5" />
               </button>
             </div>
 
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 text-xs">
               <div className="sm:col-span-2">
-                <label className="block text-slate-400 mb-1">NOME / Razão Social</label>
+                <label className="block text-slate-500 mb-1">NOME / Razão Social</label>
                 <input
                   type="text"
                   value={editingInvoice.nome}
                   onChange={e => setEditingInvoice({ ...editingInvoice, nome: e.target.value })}
-                  className="w-full bg-[#020617] border border-slate-800 text-slate-200 rounded-xl p-2.5 outline-none focus:ring-1 focus:ring-cyan-500"
+                  className="w-full bg-slate-50 border border-slate-200 text-slate-800 rounded-lg p-2 outline-none focus:ring-2 focus:ring-blue-600"
                 />
               </div>
 
               <div>
-                <label className="block text-slate-400 mb-1">CPF / CNPJ</label>
+                <label className="block text-slate-500 mb-1">CPF / CNPJ</label>
                 <input
                   type="text"
                   value={editingInvoice.documento}
                   onChange={e => setEditingInvoice({ ...editingInvoice, documento: e.target.value })}
-                  className="w-full bg-[#020617] border border-slate-800 text-slate-200 rounded-xl p-2.5 outline-none focus:ring-1 focus:ring-cyan-500 font-mono"
+                  className="w-full bg-slate-50 border border-slate-200 text-slate-800 rounded-lg p-2 outline-none focus:ring-2 focus:ring-blue-600"
                 />
               </div>
 
               <div>
-                <label className="block text-slate-400 mb-1">DATA NF-e</label>
+                <label className="block text-slate-500 mb-1">DATA NF-e</label>
                 <input
                   type="text"
                   value={editingInvoice.dataSaida}
                   onChange={e => setEditingInvoice({ ...editingInvoice, dataSaida: e.target.value })}
-                  className="w-full bg-[#020617] border border-slate-800 text-slate-200 rounded-xl p-2.5 outline-none focus:ring-1 focus:ring-cyan-500 font-mono"
+                  className="w-full bg-slate-50 border border-slate-200 text-slate-800 rounded-lg p-2 outline-none focus:ring-2 focus:ring-blue-600"
                 />
               </div>
 
               <div>
-                <label className="block text-slate-400 mb-1">FATURA</label>
+                <label className="block text-slate-500 mb-1">FATURA</label>
                 <input
                   type="text"
                   value={editingInvoice.fatura}
                   onChange={e => setEditingInvoice({ ...editingInvoice, fatura: e.target.value })}
-                  className="w-full bg-[#020617] border border-slate-800 text-slate-200 rounded-xl p-2.5 outline-none focus:ring-1 focus:ring-cyan-500 font-mono"
+                  className="w-full bg-slate-50 border border-slate-200 text-slate-800 rounded-lg p-2 outline-none focus:ring-2 focus:ring-blue-600"
                 />
               </div>
 
               <div>
-                <label className="block text-slate-400 mb-1">MARKETPLACE</label>
+                <label className="block text-slate-500 mb-1">MARKETPLACE</label>
                 <select
                   value={editingInvoice.origem}
                   onChange={e => setEditingInvoice({ ...editingInvoice, origem: e.target.value })}
-                  className="w-full bg-[#020617] border border-slate-800 text-slate-200 rounded-xl p-2.5 outline-none focus:ring-1 focus:ring-cyan-500"
+                  className="w-full bg-slate-50 border border-slate-200 text-slate-800 rounded-lg p-2 outline-none focus:ring-2 focus:ring-blue-600"
                 >
                   <option value="Shopee">Shopee</option>
                   <option value="Mercado Livre">Mercado Livre</option>
+                  <option value="Amazon">Amazon</option>
+                  <option value="Magalu">Magalu</option>
+                  <option value="TikTok Shop">TikTok Shop</option>
                   <option value="WhatsApp">WhatsApp</option>
-                  <option value="TikTok">TikTok</option>
                   <option value="Outros">Outros</option>
                 </select>
               </div>
 
               <div className="sm:col-span-2">
-                <label className="block text-slate-400 mb-1">ENDEREÇO</label>
+                <label className="block text-slate-500 mb-1">ENDEREÇO</label>
                 <input
                   type="text"
                   value={editingInvoice.endereco}
                   onChange={e => setEditingInvoice({ ...editingInvoice, endereco: e.target.value })}
-                  className="w-full bg-[#020617] border border-slate-800 text-slate-200 rounded-xl p-2.5 outline-none focus:ring-1 focus:ring-cyan-500"
+                  className="w-full bg-slate-50 border border-slate-200 text-slate-800 rounded-lg p-2 outline-none focus:ring-2 focus:ring-blue-600"
                 />
               </div>
 
               <div>
-                <label className="block text-slate-400 mb-1">BAIRRO</label>
+                <label className="block text-slate-500 mb-1">BAIRRO</label>
                 <input
                   type="text"
                   value={editingInvoice.bairro}
                   onChange={e => setEditingInvoice({ ...editingInvoice, bairro: e.target.value })}
-                  className="w-full bg-[#020617] border border-slate-800 text-slate-200 rounded-xl p-2.5 outline-none focus:ring-1 focus:ring-cyan-500"
+                  className="w-full bg-slate-50 border border-slate-200 text-slate-800 rounded-lg p-2 outline-none focus:ring-2 focus:ring-blue-600"
                 />
               </div>
 
               <div>
-                <label className="block text-slate-400 mb-1">CEP</label>
+                <label className="block text-slate-500 mb-1">CEP</label>
                 <input
                   type="text"
                   value={editingInvoice.cep}
                   onChange={e => setEditingInvoice({ ...editingInvoice, cep: e.target.value })}
-                  className="w-full bg-[#020617] border border-slate-800 text-slate-200 rounded-xl p-2.5 outline-none focus:ring-1 focus:ring-cyan-500 font-mono"
+                  className="w-full bg-slate-50 border border-slate-200 text-slate-800 rounded-lg p-2 outline-none focus:ring-2 focus:ring-blue-600"
                 />
               </div>
 
               <div>
-                <label className="block text-slate-400 mb-1">CIDADE</label>
-                <input
-                  type="text"
+                <label className="block text-slate-500 mb-1">MUNICÍPIO (IBGE)</label>
+                <CityAutocompleteIBGE
                   value={editingInvoice.municipio}
-                  onChange={e => setEditingInvoice({ ...editingInvoice, municipio: e.target.value })}
-                  className="w-full bg-[#020617] border border-slate-800 text-slate-200 rounded-xl p-2.5 outline-none focus:ring-1 focus:ring-cyan-500"
+                  ufValue={editingInvoice.uf}
+                  onSelect={(city, uf, ibgeCode) => {
+                    setEditingInvoice({
+                      ...editingInvoice,
+                      municipio: city,
+                      uf: uf,
+                      destinatarioCodigoMunicipio: ibgeCode
+                    });
+                  }}
+                  className="w-full bg-slate-50 border border-slate-200 text-slate-800 rounded-lg p-2 outline-none focus:ring-2 focus:ring-blue-600 text-xs"
                 />
               </div>
 
               <div>
-                <label className="block text-slate-400 mb-1">UF</label>
+                <label className="block text-slate-500 mb-1">UF</label>
                 <input
                   type="text"
                   value={editingInvoice.uf}
-                  onChange={e => setEditingInvoice({ ...editingInvoice, uf: e.target.value })}
-                  className="w-full bg-[#020617] border border-slate-800 text-slate-200 rounded-xl p-2.5 outline-none focus:ring-1 focus:ring-cyan-500 font-mono"
+                  onChange={e => setEditingInvoice({ ...editingInvoice, uf: e.target.value.toUpperCase() })}
+                  maxLength={2}
+                  className="w-full bg-slate-50 border border-slate-200 text-slate-800 rounded-lg p-2 outline-none focus:ring-2 focus:ring-blue-600"
                 />
               </div>
 
               <div>
-                <label className="block text-slate-400 mb-1">CÓDIGO (SKU)</label>
+                <label className="block text-slate-500 mb-1">CÓDIGO SKU</label>
                 <input
                   type="text"
                   value={editingInvoice.codigo}
                   onChange={e => setEditingInvoice({ ...editingInvoice, codigo: e.target.value })}
-                  className="w-full bg-[#020617] border border-slate-800 text-slate-200 rounded-xl p-2.5 outline-none focus:ring-1 focus:ring-cyan-500 font-mono"
+                  className="w-full bg-slate-50 border border-slate-200 text-slate-800 rounded-lg p-2 outline-none focus:ring-2 focus:ring-blue-600"
                 />
               </div>
 
               <div>
-                <label className="block text-slate-400 mb-1">QUANTIDADE</label>
+                <label className="block text-slate-500 mb-1">QUANTIDADE</label>
                 <input
                   type="text"
                   value={editingInvoice.quantidade}
                   onChange={e => setEditingInvoice({ ...editingInvoice, quantidade: e.target.value })}
-                  className="w-full bg-[#020617] border border-slate-800 text-slate-200 rounded-xl p-2.5 outline-none focus:ring-1 focus:ring-cyan-500 font-mono"
+                  className="w-full bg-slate-50 border border-slate-200 text-slate-800 rounded-lg p-2 outline-none focus:ring-2 focus:ring-blue-600"
                 />
               </div>
 
               <div>
-                <label className="block text-slate-400 mb-1">COR</label>
+                <label className="block text-slate-500 mb-1">COR / VARIANTE</label>
                 <select
                   value={editingInvoice.cor}
                   onChange={e => setEditingInvoice({ ...editingInvoice, cor: e.target.value })}
-                  className="w-full bg-[#020617] border border-slate-800 text-slate-200 rounded-xl p-2.5 outline-none focus:ring-1 focus:ring-cyan-500"
+                  className="w-full bg-slate-50 border border-slate-200 text-slate-800 rounded-lg p-2 outline-none focus:ring-2 focus:ring-blue-600"
                 >
                   <option value="Preto">Preto</option>
                   <option value="Marrom">Marrom</option>
                   <option value="Incolor">Incolor</option>
+                  <option value="Kit 1">Kit 1</option>
                   <option value="Não identificada">Não identificada</option>
                 </select>
               </div>
 
               <div className="sm:col-span-3">
-                <label className="block text-slate-400 mb-1">DESCRIÇÃO DO PRODUTO</label>
+                <label className="block text-slate-500 mb-1">DESCRIÇÃO DO PRODUTO</label>
                 <input
                   type="text"
                   value={editingInvoice.descricao}
                   onChange={e => setEditingInvoice({ ...editingInvoice, descricao: e.target.value })}
-                  className="w-full bg-[#020617] border border-slate-800 text-slate-200 rounded-xl p-2.5 outline-none focus:ring-1 focus:ring-cyan-500"
+                  className="w-full bg-slate-50 border border-slate-200 text-slate-800 rounded-lg p-2 outline-none focus:ring-2 focus:ring-blue-600"
                 />
               </div>
 
               <div>
-                <label className="block text-slate-400 mb-1">VALOR PRODUTOS</label>
+                <label className="block text-slate-500 mb-1">VALOR PRODUTOS (R$)</label>
                 <input
                   type="text"
                   value={editingInvoice.valorProdutos}
                   onChange={e => setEditingInvoice({ ...editingInvoice, valorProdutos: e.target.value })}
-                  className="w-full bg-[#020617] border border-slate-800 text-slate-200 rounded-xl p-2.5 outline-none focus:ring-1 focus:ring-cyan-500 font-mono"
+                  className="w-full bg-slate-50 border border-slate-200 text-slate-800 rounded-lg p-2 outline-none focus:ring-2 focus:ring-blue-600"
                 />
               </div>
 
               <div>
-                <label className="block text-slate-400 mb-1">DESCONTO</label>
+                <label className="block text-slate-500 mb-1">DESCONTO (R$)</label>
                 <input
                   type="text"
                   value={editingInvoice.desconto}
                   onChange={e => setEditingInvoice({ ...editingInvoice, desconto: e.target.value })}
-                  className="w-full bg-[#020617] border border-slate-800 text-slate-200 rounded-xl p-2.5 outline-none focus:ring-1 focus:ring-cyan-500 font-mono"
+                  className="w-full bg-slate-50 border border-slate-200 text-slate-800 rounded-lg p-2 outline-none focus:ring-2 focus:ring-blue-600"
                 />
               </div>
 
               <div>
-                <label className="block text-slate-400 mb-1">VALOR FINAL</label>
+                <label className="block text-slate-500 mb-1">VALOR FINAL DA NOTA (R$)</label>
                 <input
                   type="text"
                   value={editingInvoice.valorNota}
                   onChange={e => setEditingInvoice({ ...editingInvoice, valorNota: e.target.value })}
-                  className="w-full bg-[#020617] border border-slate-800 text-emerald-400 rounded-xl p-2.5 outline-none focus:ring-1 focus:ring-cyan-500 font-mono font-bold"
+                  className="w-full bg-slate-50 border border-slate-200 text-slate-800 rounded-lg p-2 outline-none focus:ring-2 focus:ring-blue-600"
                 />
               </div>
             </div>
 
-            <div className="pt-4 flex justify-end gap-2 border-t border-slate-800">
+            <div className="pt-4 flex justify-end space-x-2 border-t border-slate-100">
               <button
                 onClick={() => setEditingInvoice(null)}
-                className="px-4 py-2 rounded-xl bg-slate-800 text-slate-300 text-xs font-bold hover:bg-slate-700 border border-slate-700"
+                className="px-4 py-2 rounded-lg bg-slate-100 text-slate-700 text-xs font-bold hover:bg-slate-200"
               >
                 Cancelar
               </button>
               <button
                 onClick={handleSaveEditedInvoice}
-                className="px-4 py-2 rounded-xl bg-gradient-to-r from-cyan-600 to-blue-600 text-white text-xs font-bold hover:from-cyan-500 hover:to-blue-500 shadow-lg shadow-cyan-600/30"
+                className="px-4 py-2 rounded-lg bg-blue-600 hover:bg-blue-500 text-white text-xs font-bold transition shadow-sm"
               >
                 Salvar Alterações
               </button>
@@ -922,216 +980,228 @@ export const DatabaseView: React.FC<DatabaseViewProps> = ({ invoices, onRefreshD
 
       {/* New Invoice Modal */}
       {isNewInvoiceModalOpen && (
-        <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-md z-50 flex items-center justify-center p-4">
-          <div className="bg-[#0f172a] border border-cyan-500/40 rounded-2xl w-full max-w-3xl p-6 shadow-2xl space-y-4 max-h-[90vh] overflow-y-auto">
-            <div className="flex items-center justify-between border-b border-slate-800 pb-3">
-              <h3 className="font-bold text-white text-base">Cadastrar Nova Nota Fiscal (17 Campos)</h3>
-              <button onClick={() => setIsNewInvoiceModalOpen(false)} className="text-slate-400 hover:text-white">
+        <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="bg-white border border-slate-200 rounded-2xl w-full max-w-3xl p-6 shadow-2xl space-y-4 max-h-[90vh] overflow-y-auto">
+            <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+              <h3 className="font-bold text-slate-900 text-base">Adicionar Novo Registro Fiscal</h3>
+              <button onClick={() => setIsNewInvoiceModalOpen(false)} className="text-slate-400 hover:text-slate-700">
                 <X className="w-5 h-5" />
               </button>
             </div>
 
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 text-xs">
               <div className="sm:col-span-2">
-                <label className="block text-slate-400 mb-1">NOME / Razão Social</label>
+                <label className="block text-slate-500 mb-1">NOME / Razão Social *</label>
                 <input
                   type="text"
-                  placeholder="Ex: Comercial Silva Ltda"
-                  value={newInv.nome}
+                  placeholder="Nome do cliente"
+                  value={newInv.nome || ''}
                   onChange={e => setNewInv({ ...newInv, nome: e.target.value })}
-                  className="w-full bg-[#020617] border border-slate-800 text-slate-200 rounded-xl p-2.5 outline-none focus:ring-1 focus:ring-cyan-500"
+                  className="w-full bg-slate-50 border border-slate-200 text-slate-800 rounded-lg p-2 outline-none focus:ring-2 focus:ring-blue-600"
                 />
               </div>
 
               <div>
-                <label className="block text-slate-400 mb-1">CPF / CNPJ</label>
+                <label className="block text-slate-500 mb-1">CPF / CNPJ</label>
                 <input
                   type="text"
-                  placeholder="00.000.000/0001-00"
-                  value={newInv.documento}
+                  placeholder="000.000.000-00"
+                  value={newInv.documento || ''}
                   onChange={e => setNewInv({ ...newInv, documento: e.target.value })}
-                  className="w-full bg-[#020617] border border-slate-800 text-slate-200 rounded-xl p-2.5 outline-none focus:ring-1 focus:ring-cyan-500 font-mono"
+                  className="w-full bg-slate-50 border border-slate-200 text-slate-800 rounded-lg p-2 outline-none focus:ring-2 focus:ring-blue-600"
                 />
               </div>
 
               <div>
-                <label className="block text-slate-400 mb-1">DATA NF-e</label>
+                <label className="block text-slate-500 mb-1">DATA NF-e</label>
                 <input
                   type="text"
-                  value={newInv.dataSaida}
+                  value={newInv.dataSaida || ''}
                   onChange={e => setNewInv({ ...newInv, dataSaida: e.target.value })}
-                  className="w-full bg-[#020617] border border-slate-800 text-slate-200 rounded-xl p-2.5 outline-none focus:ring-1 focus:ring-cyan-500 font-mono"
+                  className="w-full bg-slate-50 border border-slate-200 text-slate-800 rounded-lg p-2 outline-none focus:ring-2 focus:ring-blue-600"
                 />
               </div>
 
               <div>
-                <label className="block text-slate-400 mb-1">FATURA</label>
+                <label className="block text-slate-500 mb-1">FATURA</label>
                 <input
                   type="text"
-                  placeholder="Ex: 27821"
-                  value={newInv.fatura}
+                  placeholder="001234"
+                  value={newInv.fatura || ''}
                   onChange={e => setNewInv({ ...newInv, fatura: e.target.value })}
-                  className="w-full bg-[#020617] border border-slate-800 text-slate-200 rounded-xl p-2.5 outline-none focus:ring-1 focus:ring-cyan-500 font-mono"
+                  className="w-full bg-slate-50 border border-slate-200 text-slate-800 rounded-lg p-2 outline-none focus:ring-2 focus:ring-blue-600"
                 />
               </div>
 
               <div>
-                <label className="block text-slate-400 mb-1">MARKETPLACE</label>
+                <label className="block text-slate-500 mb-1">MARKETPLACE</label>
                 <select
-                  value={newInv.origem}
+                  value={newInv.origem || 'Shopee'}
                   onChange={e => setNewInv({ ...newInv, origem: e.target.value })}
-                  className="w-full bg-[#020617] border border-slate-800 text-slate-200 rounded-xl p-2.5 outline-none focus:ring-1 focus:ring-cyan-500"
+                  className="w-full bg-slate-50 border border-slate-200 text-slate-800 rounded-lg p-2 outline-none focus:ring-2 focus:ring-blue-600"
                 >
                   <option value="Shopee">Shopee</option>
                   <option value="Mercado Livre">Mercado Livre</option>
+                  <option value="Amazon">Amazon</option>
+                  <option value="Magalu">Magalu</option>
+                  <option value="TikTok Shop">TikTok Shop</option>
                   <option value="WhatsApp">WhatsApp</option>
-                  <option value="TikTok">TikTok</option>
                   <option value="Outros">Outros</option>
                 </select>
               </div>
 
               <div className="sm:col-span-2">
-                <label className="block text-slate-400 mb-1">ENDEREÇO</label>
+                <label className="block text-slate-500 mb-1">ENDEREÇO</label>
                 <input
                   type="text"
-                  placeholder="Ex: Rua das Palmeiras, 150"
-                  value={newInv.endereco}
+                  placeholder="Rua, Número, Complemento"
+                  value={newInv.endereco || ''}
                   onChange={e => setNewInv({ ...newInv, endereco: e.target.value })}
-                  className="w-full bg-[#020617] border border-slate-800 text-slate-200 rounded-xl p-2.5 outline-none focus:ring-1 focus:ring-cyan-500"
+                  className="w-full bg-slate-50 border border-slate-200 text-slate-800 rounded-lg p-2 outline-none focus:ring-2 focus:ring-blue-600"
                 />
               </div>
 
               <div>
-                <label className="block text-slate-400 mb-1">BAIRRO</label>
+                <label className="block text-slate-500 mb-1">BAIRRO</label>
                 <input
                   type="text"
-                  placeholder="Ex: Centro"
-                  value={newInv.bairro}
+                  placeholder="Bairro"
+                  value={newInv.bairro || ''}
                   onChange={e => setNewInv({ ...newInv, bairro: e.target.value })}
-                  className="w-full bg-[#020617] border border-slate-800 text-slate-200 rounded-xl p-2.5 outline-none focus:ring-1 focus:ring-cyan-500"
+                  className="w-full bg-slate-50 border border-slate-200 text-slate-800 rounded-lg p-2 outline-none focus:ring-2 focus:ring-blue-600"
                 />
               </div>
 
               <div>
-                <label className="block text-slate-400 mb-1">CEP</label>
+                <label className="block text-slate-500 mb-1">CEP</label>
                 <input
                   type="text"
                   placeholder="00000-000"
-                  value={newInv.cep}
+                  value={newInv.cep || ''}
                   onChange={e => setNewInv({ ...newInv, cep: e.target.value })}
-                  className="w-full bg-[#020617] border border-slate-800 text-slate-200 rounded-xl p-2.5 outline-none focus:ring-1 focus:ring-cyan-500 font-mono"
+                  className="w-full bg-slate-50 border border-slate-200 text-slate-800 rounded-lg p-2 outline-none focus:ring-2 focus:ring-blue-600"
                 />
               </div>
 
               <div>
-                <label className="block text-slate-400 mb-1">CIDADE</label>
-                <input
-                  type="text"
-                  value={newInv.municipio}
-                  onChange={e => setNewInv({ ...newInv, municipio: e.target.value })}
-                  className="w-full bg-[#020617] border border-slate-800 text-slate-200 rounded-xl p-2.5 outline-none focus:ring-1 focus:ring-cyan-500"
+                <label className="block text-slate-500 mb-1">MUNICÍPIO (IBGE)</label>
+                <CityAutocompleteIBGE
+                  value={newInv.municipio || ''}
+                  ufValue={newInv.uf || ''}
+                  onSelect={(city, uf, ibgeCode) => {
+                    setNewInv({
+                      ...newInv,
+                      municipio: city,
+                      uf: uf,
+                      destinatarioCodigoMunicipio: ibgeCode
+                    });
+                  }}
+                  className="w-full bg-slate-50 border border-slate-200 text-slate-800 rounded-lg p-2 outline-none focus:ring-2 focus:ring-blue-600 text-xs"
                 />
               </div>
 
               <div>
-                <label className="block text-slate-400 mb-1">UF</label>
+                <label className="block text-slate-500 mb-1">UF</label>
                 <input
                   type="text"
-                  value={newInv.uf}
-                  onChange={e => setNewInv({ ...newInv, uf: e.target.value })}
-                  className="w-full bg-[#020617] border border-slate-800 text-slate-200 rounded-xl p-2.5 outline-none focus:ring-1 focus:ring-cyan-500 font-mono"
+                  placeholder="SP"
+                  value={newInv.uf || 'SP'}
+                  onChange={e => setNewInv({ ...newInv, uf: e.target.value.toUpperCase() })}
+                  maxLength={2}
+                  className="w-full bg-slate-50 border border-slate-200 text-slate-800 rounded-lg p-2 outline-none focus:ring-2 focus:ring-blue-600"
                 />
               </div>
 
               <div>
-                <label className="block text-slate-400 mb-1">CÓDIGO (SKU)</label>
+                <label className="block text-slate-500 mb-1">CÓDIGO SKU</label>
                 <input
                   type="text"
-                  value={newInv.codigo}
+                  value={newInv.codigo || ''}
                   onChange={e => setNewInv({ ...newInv, codigo: e.target.value })}
-                  className="w-full bg-[#020617] border border-slate-800 text-slate-200 rounded-xl p-2.5 outline-none focus:ring-1 focus:ring-cyan-500 font-mono"
+                  className="w-full bg-slate-50 border border-slate-200 text-slate-800 rounded-lg p-2 outline-none focus:ring-2 focus:ring-blue-600"
                 />
               </div>
 
               <div>
-                <label className="block text-slate-400 mb-1">QUANTIDADE</label>
+                <label className="block text-slate-500 mb-1">QUANTIDADE</label>
                 <input
                   type="text"
-                  value={newInv.quantidade}
+                  value={newInv.quantidade || '1'}
                   onChange={e => setNewInv({ ...newInv, quantidade: e.target.value })}
-                  className="w-full bg-[#020617] border border-slate-800 text-slate-200 rounded-xl p-2.5 outline-none focus:ring-1 focus:ring-cyan-500 font-mono"
+                  className="w-full bg-slate-50 border border-slate-200 text-slate-800 rounded-lg p-2 outline-none focus:ring-2 focus:ring-blue-600"
                 />
               </div>
 
               <div>
-                <label className="block text-slate-400 mb-1">COR</label>
+                <label className="block text-slate-500 mb-1">COR / VARIANTE</label>
                 <select
-                  value={newInv.cor}
+                  value={newInv.cor || 'Preto'}
                   onChange={e => setNewInv({ ...newInv, cor: e.target.value })}
-                  className="w-full bg-[#020617] border border-slate-800 text-slate-200 rounded-xl p-2.5 outline-none focus:ring-1 focus:ring-cyan-500"
+                  className="w-full bg-slate-50 border border-slate-200 text-slate-800 rounded-lg p-2 outline-none focus:ring-2 focus:ring-blue-600"
                 >
                   <option value="Preto">Preto</option>
                   <option value="Marrom">Marrom</option>
                   <option value="Incolor">Incolor</option>
+                  <option value="Kit 1">Kit 1</option>
                   <option value="Não identificada">Não identificada</option>
                 </select>
               </div>
 
               <div className="sm:col-span-3">
-                <label className="block text-slate-400 mb-1">DESCRIÇÃO DO PRODUTO</label>
+                <label className="block text-slate-500 mb-1">DESCRIÇÃO DO PRODUTO *</label>
                 <input
                   type="text"
-                  placeholder="Ex: Verniz Especial Pro - Cor: Preto"
-                  value={newInv.descricao}
+                  placeholder="Descrição do produto vendido"
+                  value={newInv.descricao || ''}
                   onChange={e => setNewInv({ ...newInv, descricao: e.target.value })}
-                  className="w-full bg-[#020617] border border-slate-800 text-slate-200 rounded-xl p-2.5 outline-none focus:ring-1 focus:ring-cyan-500"
+                  className="w-full bg-slate-50 border border-slate-200 text-slate-800 rounded-lg p-2 outline-none focus:ring-2 focus:ring-blue-600"
                 />
               </div>
 
               <div>
-                <label className="block text-slate-400 mb-1">VALOR PRODUTOS</label>
-                <input
-                  type="text"
-                  placeholder="289,80"
-                  value={newInv.valorProdutos}
-                  onChange={e => setNewInv({ ...newInv, valorProdutos: e.target.value })}
-                  className="w-full bg-[#020617] border border-slate-800 text-slate-200 rounded-xl p-2.5 outline-none focus:ring-1 focus:ring-cyan-500 font-mono"
-                />
-              </div>
-
-              <div>
-                <label className="block text-slate-400 mb-1">DESCONTO</label>
+                <label className="block text-slate-500 mb-1">VALOR PRODUTOS (R$)</label>
                 <input
                   type="text"
                   placeholder="0,00"
-                  value={newInv.desconto}
-                  onChange={e => setNewInv({ ...newInv, desconto: e.target.value })}
-                  className="w-full bg-[#020617] border border-slate-800 text-slate-200 rounded-xl p-2.5 outline-none focus:ring-1 focus:ring-cyan-500 font-mono"
+                  value={newInv.valorProdutos || '0,00'}
+                  onChange={e => setNewInv({ ...newInv, valorProdutos: e.target.value })}
+                  className="w-full bg-slate-50 border border-slate-200 text-slate-800 rounded-lg p-2 outline-none focus:ring-2 focus:ring-blue-600"
                 />
               </div>
 
               <div>
-                <label className="block text-slate-400 mb-1">VALOR FINAL</label>
+                <label className="block text-slate-500 mb-1">DESCONTO (R$)</label>
                 <input
                   type="text"
-                  placeholder="289,80"
-                  value={newInv.valorNota}
+                  placeholder="0,00"
+                  value={newInv.desconto || '0,00'}
+                  onChange={e => setNewInv({ ...newInv, desconto: e.target.value })}
+                  className="w-full bg-slate-50 border border-slate-200 text-slate-800 rounded-lg p-2 outline-none focus:ring-2 focus:ring-blue-600"
+                />
+              </div>
+
+              <div>
+                <label className="block text-slate-500 mb-1">VALOR FINAL NOTA (R$)</label>
+                <input
+                  type="text"
+                  placeholder="0,00"
+                  value={newInv.valorNota || '0,00'}
                   onChange={e => setNewInv({ ...newInv, valorNota: e.target.value })}
-                  className="w-full bg-[#020617] border border-slate-800 text-emerald-400 rounded-xl p-2.5 outline-none focus:ring-1 focus:ring-cyan-500 font-mono font-bold"
+                  className="w-full bg-slate-50 border border-slate-200 text-slate-800 rounded-lg p-2 outline-none focus:ring-2 focus:ring-blue-600"
                 />
               </div>
             </div>
 
-            <div className="pt-4 flex justify-end gap-2 border-t border-slate-800">
+            <div className="pt-4 flex justify-end space-x-2 border-t border-slate-100">
               <button
                 onClick={() => setIsNewInvoiceModalOpen(false)}
-                className="px-4 py-2 rounded-xl bg-slate-800 text-slate-300 text-xs font-bold hover:bg-slate-700 border border-slate-700"
+                className="px-4 py-2 rounded-lg bg-slate-100 text-slate-700 text-xs font-bold hover:bg-slate-200"
               >
                 Cancelar
               </button>
               <button
                 onClick={handleCreateNewInvoice}
-                className="px-4 py-2 rounded-xl bg-gradient-to-r from-cyan-600 to-blue-600 text-white text-xs font-bold hover:from-cyan-500 hover:to-blue-500 shadow-lg shadow-cyan-600/30"
+                className="px-4 py-2 rounded-lg bg-blue-600 hover:bg-blue-500 text-white text-xs font-bold transition shadow-sm"
               >
                 Cadastrar Nota
               </button>
@@ -1140,51 +1210,40 @@ export const DatabaseView: React.FC<DatabaseViewProps> = ({ invoices, onRefreshD
         </div>
       )}
 
-      {/* Modal de Confirmação para Zerar Banco de Dados */}
+      {/* Reset Confirmation Modal */}
       {isResetModalOpen && (
-        <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-md z-50 flex items-center justify-center p-4">
-          <div className="bg-[#0f172a] border border-rose-500/40 rounded-2xl w-full max-w-md p-6 shadow-2xl space-y-4">
-            <div className="flex items-center justify-between border-b border-slate-800 pb-3">
-              <div className="flex items-center gap-2">
-                <div className="p-2 bg-rose-500/10 rounded-lg text-rose-400 border border-rose-500/30">
-                  <AlertTriangle className="w-5 h-5" />
-                </div>
-                <div>
-                  <h3 className="font-bold text-white text-base">Zerar Banco de Dados</h3>
-                  <p className="text-xs text-slate-400">Limpeza total de registros fiscais</p>
-                </div>
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4 animate-fade-in font-sans">
+          <div className="bg-white border border-rose-200 rounded-2xl w-full max-w-md p-6 shadow-2xl space-y-4">
+            <div className="flex items-center space-x-3 text-rose-600">
+              <div className="p-3 bg-rose-100 rounded-xl">
+                <AlertTriangle className="w-6 h-6" />
               </div>
-              <button onClick={() => setIsResetModalOpen(false)} className="text-slate-400 hover:text-white">
-                <X className="w-5 h-5" />
-              </button>
+              <div>
+                <h3 className="font-bold text-slate-900 text-base">Zerar Banco de Dados?</h3>
+                <p className="text-xs text-slate-500">Esta ação é irreversível.</p>
+              </div>
             </div>
 
-            <div className="space-y-3 text-xs text-slate-300">
-              <p className="font-medium text-slate-200">
-                Tem certeza que deseja <strong className="text-rose-400">ZERAR totalmente o Banco de Dados MySQL</strong>?
+            <div className="text-xs text-slate-600 space-y-2 bg-rose-50/50 p-3.5 rounded-xl border border-rose-100">
+              <p className="font-semibold text-rose-800 flex items-center space-x-1">
+                <span>⚠️ Consequências desta ação:</span>
               </p>
-              <div className="p-3 bg-rose-950/40 border border-rose-500/30 rounded-xl text-rose-300 text-xs space-y-1">
-                <p className="font-bold flex items-center gap-1">
-                  <span>⚠️ Consequências desta ação:</span>
-                </p>
-                <p>• Todos os <strong>{invoices.length}</strong> registros de notas fiscais serão removidos do MySQL.</p>
-                <p>• O arquivo de backup <code className="text-cyan-300 font-mono">database_spm_fiscal.sql</code> será resetado.</p>
-                <p>• Os indicadores do Dashboard e Auditoria serão zerados.</p>
-              </div>
+              <p>• Todos os <strong>{invoices.length}</strong> registros de notas fiscais serão removidos.</p>
+              <p>• Os indicadores do Dashboard e Auditoria serão zerados.</p>
             </div>
 
-            <div className="pt-4 flex justify-end gap-2 border-t border-slate-800">
+            <div className="pt-4 flex justify-end space-x-2 border-t border-slate-100">
               <button
                 onClick={() => setIsResetModalOpen(false)}
                 disabled={isResetting}
-                className="px-4 py-2 rounded-xl bg-slate-800 text-slate-300 text-xs font-bold hover:bg-slate-700 border border-slate-700"
+                className="px-4 py-2 rounded-lg bg-slate-100 text-slate-700 text-xs font-bold hover:bg-slate-200 border border-slate-200"
               >
                 Cancelar
               </button>
               <button
                 onClick={handleResetDatabase}
                 disabled={isResetting}
-                className="flex items-center gap-1.5 px-4 py-2 rounded-xl bg-rose-600 hover:bg-rose-500 text-white text-xs font-bold transition shadow-lg shadow-rose-600/30 disabled:opacity-50"
+                className="flex items-center space-x-1.5 px-4 py-2 rounded-lg bg-rose-600 hover:bg-rose-500 text-white text-xs font-bold transition shadow-sm disabled:opacity-50"
               >
                 <Trash2 className="w-4 h-4" />
                 <span>{isResetting ? 'Zerando Banco...' : 'Sim, Zerar Banco de Dados'}</span>
@@ -1194,312 +1253,12 @@ export const DatabaseView: React.FC<DatabaseViewProps> = ({ invoices, onRefreshD
         </div>
       )}
 
-      {/* Modal de Importação e Atualização de Planilha Excel (.xlsx) */}
-      {isImportExcelModalOpen && (
-        <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-md z-50 flex items-center justify-center p-4">
-          <div className="bg-[#0f172a] border border-blue-500/40 rounded-2xl w-full max-w-lg p-6 shadow-2xl space-y-4">
-            <div className="flex items-center justify-between border-b border-slate-800 pb-3">
-              <div className="flex items-center gap-2.5">
-                <div className="p-2 bg-blue-500/10 rounded-xl text-blue-400 border border-blue-500/30">
-                  <FileSpreadsheet className="w-5 h-5" />
-                </div>
-                <div>
-                  <h3 className="font-bold text-white text-base">Importar Planilha Excel (.xlsx)</h3>
-                  <p className="text-xs text-slate-400">Atualização automática e em lote dos registros fiscais</p>
-                </div>
-              </div>
-              <button 
-                onClick={() => setIsImportExcelModalOpen(false)} 
-                disabled={isImporting}
-                className="text-slate-400 hover:text-white disabled:opacity-50"
-              >
-                <X className="w-5 h-5" />
-              </button>
-            </div>
-
-            <div className="space-y-4 text-xs text-slate-300">
-              <div className="p-3.5 bg-blue-950/40 border border-blue-500/30 rounded-xl space-y-1.5 text-blue-200 leading-relaxed">
-                <p className="font-bold flex items-center gap-1.5 text-blue-300">
-                  <Sparkles className="w-4 h-4 text-blue-400" />
-                  <span>Como funciona a sincronização inteligente?</span>
-                </p>
-                <p>
-                  • <strong>Itens já cadastrados:</strong> O sistema identifica a nota fiscal (pela Fatura, CPF/CNPJ ou SKU) e <strong>atualiza a Cor, Quantidade, Descrição, Valores e Endereço</strong> com as informações da planilha.
-                </p>
-                <p>
-                  • <strong>Novos itens:</strong> Se a planilha contiver novas notas fiscais, elas serão adicionadas automaticamente ao banco de dados e ao mapa.
-                </p>
-              </div>
-
-              {/* Upload Dropzone */}
-              <input
-                ref={excelFileInputRef}
-                type="file"
-                accept=".xlsx, .xls, .csv"
-                className="hidden"
-                onChange={e => {
-                  if (e.target.files && e.target.files[0]) {
-                    setImportFile(e.target.files[0]);
-                    setImportResult(null);
-                    setImportError(null);
-                  }
-                }}
-              />
-
-              <div
-                onClick={() => excelFileInputRef.current?.click()}
-                className={`border-2 border-dashed rounded-2xl p-6 text-center cursor-pointer transition-all flex flex-col items-center justify-center gap-2 ${
-                  importFile
-                    ? 'border-blue-500/60 bg-blue-500/10'
-                    : 'border-slate-700 hover:border-blue-500/50 hover:bg-slate-800/40'
-                }`}
-              >
-                {importFile ? (
-                  <>
-                    <div className="p-3 bg-blue-500 text-white rounded-full shadow-lg shadow-blue-500/30">
-                      <FileCheck className="w-6 h-6" />
-                    </div>
-                    <p className="font-bold text-white text-sm mt-1">{importFile.name}</p>
-                    <p className="text-slate-400 text-[11px]">
-                      Tamanho: {(importFile.size / 1024).toFixed(1)} KB • Clique para trocar de arquivo
-                    </p>
-                  </>
-                ) : (
-                  <>
-                    <div className="p-3 bg-slate-800 text-blue-400 rounded-full border border-slate-700">
-                      <UploadCloud className="w-6 h-6" />
-                    </div>
-                    <p className="font-bold text-white text-sm mt-1">
-                      Clique aqui para selecionar a planilha Excel (.xlsx)
-                    </p>
-                    <p className="text-slate-400 text-[11px]">
-                      Formatos aceitos: .xlsx, .xls ou .csv exportados do sistema
-                    </p>
-                  </>
-                )}
-              </div>
-
-              {/* Erro */}
-              {importError && (
-                <div className="p-3 bg-rose-950/60 border border-rose-500/40 rounded-xl text-rose-300 flex items-start gap-2">
-                  <AlertTriangle className="w-4 h-4 text-rose-400 shrink-0 mt-0.5" />
-                  <span>{importError}</span>
-                </div>
-              )}
-
-              {/* Resultado Sucesso */}
-              {importResult && (
-                <div className="p-4 bg-emerald-950/60 border border-emerald-500/40 rounded-xl space-y-2">
-                  <div className="flex items-center gap-2 text-emerald-300 font-bold">
-                    <Check className="w-4 h-4 text-emerald-400" />
-                    <span>{importResult.message}</span>
-                  </div>
-                  <div className="grid grid-cols-3 gap-2 pt-1">
-                    <div className="bg-slate-900/80 p-2.5 rounded-lg border border-slate-800 text-center">
-                      <p className="text-[10px] text-slate-400 font-bold uppercase">Total Lidos</p>
-                      <p className="text-base font-black text-white">{importResult.totalRows}</p>
-                    </div>
-                    <div className="bg-blue-950/40 p-2.5 rounded-lg border border-blue-500/30 text-center">
-                      <p className="text-[10px] text-blue-300 font-bold uppercase">Atualizados</p>
-                      <p className="text-base font-black text-blue-400">{importResult.updatedCount}</p>
-                    </div>
-                    <div className="bg-emerald-950/40 p-2.5 rounded-lg border border-emerald-500/30 text-center">
-                      <p className="text-[10px] text-emerald-300 font-bold uppercase">Novos Inseridos</p>
-                      <p className="text-base font-black text-emerald-400">{importResult.insertedCount}</p>
-                    </div>
-                  </div>
-                </div>
-              )}
-            </div>
-
-            <div className="pt-4 flex justify-end gap-2 border-t border-slate-800">
-              <button
-                onClick={() => setIsImportExcelModalOpen(false)}
-                disabled={isImporting}
-                className="px-4 py-2 rounded-xl bg-slate-800 text-slate-300 text-xs font-bold hover:bg-slate-700 border border-slate-700 disabled:opacity-50"
-              >
-                {importResult ? 'Concluir' : 'Cancelar'}
-              </button>
-
-              {!importResult && (
-                <button
-                  onClick={handleImportExcelFile}
-                  disabled={!importFile || isImporting}
-                  className="flex items-center gap-1.5 px-4 py-2 rounded-xl bg-gradient-to-r from-blue-600 to-cyan-600 hover:from-blue-500 hover:to-cyan-500 text-white text-xs font-bold transition shadow-lg shadow-blue-600/30 disabled:opacity-50"
-                >
-                  <RefreshCw className={`w-4 h-4 ${isImporting ? 'animate-spin' : ''}`} />
-                  <span>{isImporting ? 'Processando Planilha...' : 'Atualizar Base de Dados'}</span>
-                </button>
-              )}
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Modal de Edição em Lote (Bulk Edit) */}
-      {isBulkEditModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-in fade-in">
-          <div className="bg-[#0f172a] border border-slate-700 w-full max-w-2xl rounded-2xl shadow-2xl p-5 sm:p-6 space-y-5 max-h-[90vh] overflow-y-auto">
-            <div className="flex items-center justify-between border-b border-slate-800 pb-3">
-              <div className="flex items-center gap-2.5">
-                <span className="p-2 rounded-xl bg-purple-500/10 text-purple-400 border border-purple-500/30">
-                  <SlidersHorizontal className="w-5 h-5" />
-                </span>
-                <div>
-                  <h3 className="font-extrabold text-white text-base sm:text-lg">
-                    Edição em Lote de Notas Fiscais
-                  </h3>
-                  <p className="text-xs text-purple-300 font-mono mt-0.5">
-                    {bulkTargetIds.length} nota(s) fiscal(is) selecionada(s) para atualização
-                  </p>
-                </div>
-              </div>
-              <button
-                onClick={() => setIsBulkEditModalOpen(false)}
-                className="text-slate-400 hover:text-white p-1 rounded-lg hover:bg-slate-800"
-              >
-                <X className="w-5 h-5" />
-              </button>
-            </div>
-
-            <div className="p-3.5 bg-purple-950/40 border border-purple-500/30 rounded-xl text-purple-200 text-xs leading-relaxed">
-              💡 <strong>Dica de uso:</strong> Apenas os campos alterados serão aplicados às <strong>{bulkTargetIds.length} notas selecionadas</strong>. Os campos deixados como <em>"Manter valor atual"</em> serão preservados.
-            </div>
-
-            <form onSubmit={handleApplyBulkEdit} className="space-y-4 text-xs font-sans">
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                
-                {/* Cor do Verniz */}
-                <div className="space-y-1.5">
-                  <label className="text-slate-300 font-bold flex items-center gap-1.5">
-                    <Tag className="w-3.5 h-3.5 text-cyan-400" />
-                    <span>Cor do Verniz:</span>
-                  </label>
-                  <select
-                    value={bulkEditForm.cor}
-                    onChange={e => setBulkEditForm(prev => ({ ...prev, cor: e.target.value }))}
-                    className="w-full bg-[#020617] border border-slate-700 text-white rounded-xl p-2.5 text-xs outline-none focus:border-cyan-500 font-semibold"
-                  >
-                    <option value="MANTER">-- Manter cor atual das notas --</option>
-                    <option value="Preto">🖤 Verniz Preto</option>
-                    <option value="Marrom">🤎 Verniz Marrom</option>
-                    <option value="Incolor">💎 Verniz Incolor</option>
-                    <option value="Não identificada">⚠️ Não identificada</option>
-                  </select>
-                </div>
-
-                {/* Marketplace / Origem */}
-                <div className="space-y-1.5">
-                  <label className="text-slate-300 font-bold flex items-center gap-1.5">
-                    <ShoppingBag className="w-3.5 h-3.5 text-amber-400" />
-                    <span>Marketplace / Canal de Venda:</span>
-                  </label>
-                  <select
-                    value={bulkEditForm.origem}
-                    onChange={e => setBulkEditForm(prev => ({ ...prev, origem: e.target.value }))}
-                    className="w-full bg-[#020617] border border-slate-700 text-white rounded-xl p-2.5 text-xs outline-none focus:border-cyan-500 font-semibold"
-                  >
-                    <option value="MANTER">-- Manter marketplace atual --</option>
-                    <option value="Shopee">🟠 Shopee</option>
-                    <option value="Mercado Livre">🟡 Mercado Livre</option>
-                    <option value="TikTok">💖 TikTok</option>
-                    <option value="WhatsApp">🟢 WhatsApp</option>
-                    <option value="Outros">🔵 Outros</option>
-                  </select>
-                </div>
-
-                {/* Quantidade */}
-                <div className="space-y-1.5">
-                  <label className="text-slate-300 font-bold flex items-center gap-1.5">
-                    <Layers className="w-3.5 h-3.5 text-emerald-400" />
-                    <span>Quantidade de Verniz:</span>
-                  </label>
-                  <select
-                    value={bulkEditForm.quantidade}
-                    onChange={e => setBulkEditForm(prev => ({ ...prev, quantidade: e.target.value }))}
-                    className="w-full bg-[#020617] border border-slate-700 text-white rounded-xl p-2.5 text-xs outline-none focus:border-cyan-500 font-semibold"
-                  >
-                    <option value="MANTER">-- Manter quantidade atual --</option>
-                    <option value="1">1 unidade</option>
-                    <option value="2">2 unidades</option>
-                    <option value="3">3 unidades</option>
-                    <option value="4">4 unidades</option>
-                    <option value="5">5 unidades</option>
-                    <option value="10">10 unidades</option>
-                  </select>
-                </div>
-
-                {/* Status */}
-                <div className="space-y-1.5">
-                  <label className="text-slate-300 font-bold flex items-center gap-1.5">
-                    <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" />
-                    <span>Status do Registro:</span>
-                  </label>
-                  <select
-                    value={bulkEditForm.status}
-                    onChange={e => setBulkEditForm(prev => ({ ...prev, status: e.target.value }))}
-                    className="w-full bg-[#020617] border border-slate-700 text-white rounded-xl p-2.5 text-xs outline-none focus:border-cyan-500 font-semibold"
-                  >
-                    <option value="MANTER">-- Manter status atual --</option>
-                    <option value="Processado">✅ Processado</option>
-                    <option value="Pendente">⏳ Pendente</option>
-                    <option value="Erro">❌ Erro</option>
-                  </select>
-                </div>
-
-                {/* Código SKU */}
-                <div className="space-y-1.5 sm:col-span-2">
-                  <label className="text-slate-300 font-bold flex items-center gap-1.5">
-                    <Tag className="w-3.5 h-3.5 text-purple-400" />
-                    <span>Código SKU (deixe em branco para não alterar):</span>
-                  </label>
-                  <input
-                    type="text"
-                    placeholder="Ex: SPM-Shopee-Preto-1 (ou deixe vazio para manter atual)"
-                    value={bulkEditForm.codigo === 'MANTER' ? '' : bulkEditForm.codigo}
-                    onChange={e => setBulkEditForm(prev => ({ ...prev, codigo: e.target.value ? e.target.value : 'MANTER' }))}
-                    className="w-full bg-[#020617] border border-slate-700 text-white rounded-xl p-2.5 text-xs outline-none focus:border-cyan-500 font-mono"
-                  />
-                </div>
-
-                {/* Descrição */}
-                <div className="space-y-1.5 sm:col-span-2">
-                  <label className="text-slate-300 font-bold flex items-center gap-1.5">
-                    <Tag className="w-3.5 h-3.5 text-cyan-400" />
-                    <span>Descrição do Item (deixe em branco para não alterar):</span>
-                  </label>
-                  <input
-                    type="text"
-                    placeholder="Ex: VERNIZ ELITE SPM 500ML ALTO BRILHO (ou deixe vazio para manter atual)"
-                    value={bulkEditForm.descricao === 'MANTER' ? '' : bulkEditForm.descricao}
-                    onChange={e => setBulkEditForm(prev => ({ ...prev, descricao: e.target.value ? e.target.value : 'MANTER' }))}
-                    className="w-full bg-[#020617] border border-slate-700 text-white rounded-xl p-2.5 text-xs outline-none focus:border-cyan-500"
-                  />
-                </div>
-
-              </div>
-
-              <div className="pt-4 flex justify-end gap-2 border-t border-slate-800">
-                <button
-                  type="button"
-                  onClick={() => setIsBulkEditModalOpen(false)}
-                  disabled={isBulkUpdating}
-                  className="px-4 py-2 rounded-xl bg-slate-800 text-slate-300 text-xs font-bold hover:bg-slate-700 border border-slate-700 disabled:opacity-50"
-                >
-                  Cancelar
-                </button>
-                <button
-                  type="submit"
-                  disabled={isBulkUpdating}
-                  className="flex items-center gap-1.5 px-5 py-2.5 rounded-xl bg-gradient-to-r from-purple-600 to-cyan-600 hover:from-purple-500 hover:to-cyan-500 text-white text-xs font-extrabold transition shadow-lg shadow-purple-600/30 disabled:opacity-50"
-                >
-                  <RefreshCw className={`w-4 h-4 ${isBulkUpdating ? 'animate-spin' : ''}`} />
-                  <span>{isBulkUpdating ? 'Salvando Alterações...' : `Aplicar em Lote (${bulkTargetIds.length} notas)`}</span>
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
+      {/* Modal de Detalhes Fiscais Completos SEFAZ XML */}
+      {selectedDetailInvoice && (
+        <InvoiceDetailModal
+          invoice={selectedDetailInvoice}
+          onClose={() => setSelectedDetailInvoice(null)}
+        />
       )}
 
     </div>

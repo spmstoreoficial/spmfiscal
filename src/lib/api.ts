@@ -6,7 +6,13 @@ import {
   DashboardStats, 
   GSheetsConfig, 
   SystemSettings,
-  N8nConfig
+  N8nConfig,
+  StockItem,
+  StockMovement,
+  StockStats,
+  NewStockMovementPayload,
+  GDriveDesktopStatus,
+  GDriveOnlineStatus
 } from '../types';
 
 const TOKEN_KEY = 'fiscal_app_jwt_token';
@@ -220,11 +226,10 @@ export const api = {
   },
 
   async uploadExcel(file: File): Promise<{ 
-    success: boolean;
-    totalRows: number;
-    updatedCount: number;
-    insertedCount: number;
-    message: string;
+    count: number; 
+    duplicateCount?: number;
+    duplicates?: Array<{ fatura: string; documento: string; nome: string; codigo: string; motivo: string }>;
+    imported: Invoice[] 
   }> {
     const formData = new FormData();
     formData.append('file', file);
@@ -233,7 +238,7 @@ export const api = {
     const headers: HeadersInit = {};
     if (token) headers['Authorization'] = `Bearer ${token}`;
 
-    const res = await fetch('/api/invoices/import-excel', {
+    const res = await fetch('/api/extract/excel', {
       method: 'POST',
       headers,
       body: formData
@@ -245,16 +250,6 @@ export const api = {
     }
 
     return await res.json();
-  },
-
-  async importExcelInvoices(file: File): Promise<{
-    success: boolean;
-    totalRows: number;
-    updatedCount: number;
-    insertedCount: number;
-    message: string;
-  }> {
-    return this.uploadExcel(file);
   },
 
   // Stats
@@ -428,8 +423,17 @@ export const api = {
     return data;
   },
 
+  async importExcelInvoices(file: File): Promise<{
+    count: number;
+    duplicateCount?: number;
+    duplicates?: Array<{ fatura: string; documento: string; nome: string; codigo: string; motivo: string }>;
+    imported: Invoice[];
+  }> {
+    return this.uploadExcel(file);
+  },
+
   // Google Drive para Desktop (100% Offline / Monitoramento em Tempo Real)
-  async getGDriveDesktopStatus(): Promise<import('../types').GDriveDesktopStatus> {
+  async getGDriveDesktopStatus(): Promise<GDriveDesktopStatus> {
     const res = await fetch('/api/gdrive-desktop/status', { headers: getAuthHeaders() });
     return await res.json();
   },
@@ -454,12 +458,109 @@ export const api = {
     return await res.json();
   },
 
-  async updateGDriveDesktopConfig(config: { folderPath?: string; autoSync?: boolean }): Promise<import('../types').GDriveDesktopStatus> {
+  async updateGDriveDesktopConfig(config: { folderPath?: string; autoSync?: boolean }): Promise<GDriveDesktopStatus> {
     const res = await fetch('/api/gdrive-desktop/config', {
       method: 'POST',
       headers: getAuthHeaders(),
       body: JSON.stringify(config)
     });
+    return await res.json();
+  },
+
+  // ================= GOOGLE DRIVE ONLINE CLOUD =================
+  async getGDriveOnlineStatus(): Promise<GDriveOnlineStatus> {
+    const res = await fetch('/api/gdrive-online/status', { headers: getAuthHeaders() });
+    return await res.json();
+  },
+
+  async syncGDriveOnline(): Promise<{
+    success: boolean;
+    count: number;
+    duplicateCount: number;
+    totalOnlineFiles: number;
+    totalPdfs?: number;
+    duplicates?: Array<{ fatura: string; documento: string; nome: string; codigo: string; motivo: string }>;
+    extracted: Invoice[];
+  }> {
+    const res = await fetch('/api/gdrive-online/sync', {
+      method: 'POST',
+      headers: getAuthHeaders()
+    });
+    if (!res.ok) {
+      const err = await res.json();
+      throw new Error(err.error || 'Erro ao sincronizar pasta online do Google Drive');
+    }
+    return await res.json();
+  },
+
+  async updateGDriveOnlineConfig(config: { folderId?: string; folderUrl?: string; autoPoll?: boolean; intervalSec?: number }): Promise<any> {
+    const res = await fetch('/api/gdrive-online/config', {
+      method: 'POST',
+      headers: getAuthHeaders(),
+      body: JSON.stringify(config)
+    });
+    return await res.json();
+  },
+
+  // ================= CONTROLE DE ESTOQUE =================
+  async getStockItems(): Promise<StockItem[]> {
+    const res = await fetch('/api/stock/items', { headers: getAuthHeaders() });
+    if (!res.ok) throw new Error('Erro ao buscar itens de estoque');
+    const data = await res.json();
+    return data.items || [];
+  },
+
+  async getStockMovements(filters?: Record<string, string>): Promise<StockMovement[]> {
+    const query = new URLSearchParams(filters || {}).toString();
+    const res = await fetch(`/api/stock/movements?${query}`, { headers: getAuthHeaders() });
+    if (!res.ok) throw new Error('Erro ao carregar movimentações de estoque');
+    const data = await res.json();
+    return data.movements || [];
+  },
+
+  async getStockStats(): Promise<StockStats> {
+    const res = await fetch('/api/stock/stats', { headers: getAuthHeaders() });
+    if (!res.ok) throw new Error('Erro ao carregar estatísticas de estoque');
+    const data = await res.json();
+    return data.stats;
+  },
+
+  async addStockMovement(payload: NewStockMovementPayload): Promise<StockMovement> {
+    const res = await fetch('/api/stock/movement', {
+      method: 'POST',
+      headers: getAuthHeaders(),
+      body: JSON.stringify(payload)
+    });
+    if (!res.ok) {
+      const err = await res.json();
+      throw new Error(err.error || 'Erro ao registrar movimentação de estoque');
+    }
+    const data = await res.json();
+    return data.movement;
+  },
+
+  async updateStockItem(item: Partial<StockItem>): Promise<{ success: boolean }> {
+    const res = await fetch('/api/stock/items', {
+      method: 'POST',
+      headers: getAuthHeaders(),
+      body: JSON.stringify(item)
+    });
+    if (!res.ok) {
+      const err = await res.json();
+      throw new Error(err.error || 'Erro ao salvar produto de estoque');
+    }
+    return await res.json();
+  },
+
+  async recalculateStock(): Promise<{ success: boolean; message: string; result: any }> {
+    const res = await fetch('/api/stock/recalculate', {
+      method: 'POST',
+      headers: getAuthHeaders()
+    });
+    if (!res.ok) {
+      const err = await res.json();
+      throw new Error(err.error || 'Erro ao recalcular estoque');
+    }
     return await res.json();
   }
 };

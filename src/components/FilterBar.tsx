@@ -1,193 +1,292 @@
 import React from 'react';
-import { DashboardFilter, DateFilterType } from '../types';
 import {
   Filter,
   Calendar,
   Search,
-  X,
-  MapPin,
-  ShoppingBag,
   RotateCcw,
-  Sparkles,
-  Tag
+  ShoppingBag,
+  MapPin,
+  Palette,
+  CheckCircle2,
+  Building2,
+  Globe
 } from 'lucide-react';
+import { CityAutocompleteIBGE } from './CityAutocompleteIBGE';
 
-interface FilterBarProps {
-  filters: DashboardFilter;
-  onUpdateFilters: (newFilters: Partial<DashboardFilter>) => void;
-  onResetFilters: () => void;
-  totalFiltered: number;
-  totalAll: number;
-}
+export type DateFilterType = 'hoje' | 'ontem' | 'ultimos_7_dias' | 'este_mes' | 'todos' | 'custom';
 
-const BRAZIL_UFS = [
-  'Todos', 'SP', 'RJ', 'MG', 'RS', 'PR', 'SC', 'BA', 'PE', 'CE',
-  'GO', 'DF', 'ES', 'MT', 'MS', 'MA', 'PB', 'PA', 'AM', 'RN',
-  'AL', 'PI', 'SE', 'RO', 'TO', 'AC', 'AP', 'RR'
+export const BRAZIL_UFS = [
+  'SP', 'RJ', 'MG', 'RS', 'PR', 'SC', 'BA', 'GO', 'PE', 'CE', 'PA', 'MT', 'MS', 'DF', 'ES', 'AM', 'RN', 'PB', 'AL', 'SE', 'PI', 'TO', 'RO', 'AC', 'AP', 'RR'
 ];
 
+export const MARKETPLACES = [
+  { id: 'Todas', label: 'Todos os Canais' },
+  { id: 'Shopee', label: 'Shopee' },
+  { id: 'Mercado Livre', label: 'Mercado Livre' },
+  { id: 'TikTok', label: 'TikTok Shop' },
+  { id: 'WhatsApp', label: 'WhatsApp / Direto' },
+  { id: 'Outros', label: 'Outros / E-commerce' }
+];
+
+export const COLORS = [
+  'Todas', 'Preto', 'Incolor', 'Marrom', 'Kit 1', 'Kit 2', 'Branco', 'Azul', 'Vermelho', 'Verde', 'Cinza', 'Outras'
+];
+
+interface FilterBarProps {
+  dateFilter: DateFilterType;
+  onSelectDateFilter: (val: DateFilterType) => void;
+  customStartDate: string;
+  customEndDate: string;
+  onChangeCustomDates: (start: string, end: string) => void;
+  selectedMarketplace: string;
+  onSelectMarketplace: (val: string) => void;
+  selectedUf: string;
+  onSelectUf: (val: string) => void;
+  selectedCity?: string;
+  onSelectCity?: (val: string) => void;
+  selectedColor: string;
+  onSelectColor: (val: string) => void;
+  selectedStatus: string;
+  onSelectStatus: (val: string) => void;
+  searchQuery: string;
+  onSearchChange: (val: string) => void;
+  onResetFilters: () => void;
+  totalFiltered: number;
+  totalRaw: number;
+}
+
 export const FilterBar: React.FC<FilterBarProps> = ({
-  filters,
-  onUpdateFilters,
+  dateFilter,
+  onSelectDateFilter,
+  customStartDate,
+  customEndDate,
+  onChangeCustomDates,
+  selectedMarketplace,
+  onSelectMarketplace,
+  selectedUf,
+  onSelectUf,
+  selectedCity = '',
+  onSelectCity,
+  selectedColor,
+  onSelectColor,
+  selectedStatus,
+  onSelectStatus,
+  searchQuery,
+  onSearchChange,
   onResetFilters,
   totalFiltered,
-  totalAll
+  totalRaw
 }) => {
-  const datePresets: { id: DateFilterType; label: string }[] = [
-    { id: 'todos', label: 'Todo Período' },
-    { id: 'hoje', label: 'Hoje' },
-    { id: '7dias', label: 'Últimos 7D' },
-    { id: '30dias', label: 'Últimos 30D' },
-    { id: 'mes', label: 'Este Mês' }
-  ];
-
-  const marketplaces = ['Todas', 'Shopee', 'Mercado Livre', 'TikTok', 'WhatsApp', 'Outros'];
-  const cores = ['Todas', 'Preto', 'Marrom', 'Incolor'];
-
-  const hasActiveFilters = Boolean(
-    (filters.datePreset && filters.datePreset !== 'todos') ||
-    (filters.origem && filters.origem !== 'Todas' && filters.origem !== 'Todos') ||
-    (filters.cor && filters.cor !== 'Todas' && filters.cor !== 'Todos') ||
-    (filters.uf && filters.uf !== 'Todos') ||
-    filters.search
-  );
+  const isFiltered =
+    dateFilter !== 'todos' ||
+    selectedMarketplace !== 'Todas' ||
+    selectedUf !== 'Todos' ||
+    (selectedCity && selectedCity.trim().length > 0) ||
+    selectedColor !== 'Todas' ||
+    selectedStatus !== 'Todos' ||
+    searchQuery.trim().length > 0;
 
   return (
-    <div className="bg-[#0f172a]/90 backdrop-blur-md p-3 sm:p-4 rounded-2xl border border-slate-800 shadow-xl space-y-3">
-      
-      {/* Top Row: Search Input + Date Presets + Results count */}
-      <div className="flex flex-wrap items-center justify-between gap-3">
+    <div className="bg-[#0b1329]/90 backdrop-blur border border-slate-800/80 rounded-xl p-2 sm:p-2.5 shadow-lg flex flex-col gap-2">
+      <div className="flex flex-wrap items-center justify-between gap-2">
         
-        {/* Instant Search Box */}
-        <div className="relative flex-1 min-w-[240px] max-w-md">
-          <Search className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
-          <input
-            type="text"
-            value={filters.search || ''}
-            onChange={(e) => onUpdateFilters({ search: e.target.value })}
-            placeholder="Buscar por NF, Cliente, CPF/CNPJ, Cidade ou Código..."
-            className="w-full pl-10 pr-9 py-2 rounded-xl bg-[#020617] border border-slate-800 text-xs sm:text-sm text-slate-200 placeholder-slate-500 focus:outline-none focus:border-cyan-500 focus:ring-1 focus:ring-cyan-500 transition-all font-sans"
-          />
-          {filters.search && (
+        {/* Left: Filter Controls */}
+        <div className="flex flex-wrap items-center gap-1.5 sm:gap-2 flex-1">
+          
+          {/* Date Filter Pills */}
+          <div className="flex items-center bg-[#020617] p-0.5 rounded-lg border border-slate-800 text-xs">
+            <Calendar className="w-3.5 h-3.5 text-cyan-400 ml-1.5 mr-0.5" />
             <button
-              onClick={() => onUpdateFilters({ search: '' })}
-              className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-white"
+              onClick={() => onSelectDateFilter('todos')}
+              className={`px-2 py-1 rounded font-bold transition ${
+                dateFilter === 'todos' ? 'bg-cyan-600 text-white shadow-sm' : 'text-slate-400 hover:text-slate-200'
+              }`}
             >
-              <X className="w-3.5 h-3.5" />
+              Todos
             </button>
-          )}
-        </div>
-
-        {/* Date Presets */}
-        <div className="flex items-center gap-1 overflow-x-auto scrollbar-none bg-[#020617] p-1 rounded-xl border border-slate-800">
-          <div className="px-2 py-1 text-slate-500 flex items-center gap-1 text-[11px] font-bold uppercase tracking-wider">
-            <Calendar className="w-3 h-3 text-cyan-400" />
-            <span className="hidden sm:inline">Data:</span>
+            <button
+              onClick={() => onSelectDateFilter('hoje')}
+              className={`px-2 py-1 rounded font-bold transition ${
+                dateFilter === 'hoje' ? 'bg-cyan-600 text-white shadow-sm' : 'text-slate-400 hover:text-slate-200'
+              }`}
+            >
+              Hoje
+            </button>
+            <button
+              onClick={() => onSelectDateFilter('ontem')}
+              className={`hidden sm:inline px-2 py-1 rounded font-bold transition ${
+                dateFilter === 'ontem' ? 'bg-cyan-600 text-white shadow-sm' : 'text-slate-400 hover:text-slate-200'
+              }`}
+            >
+              Ontem
+            </button>
+            <button
+              onClick={() => onSelectDateFilter('ultimos_7_dias')}
+              className={`hidden md:inline px-2 py-1 rounded font-bold transition ${
+                dateFilter === 'ultimos_7_dias' ? 'bg-cyan-600 text-white shadow-sm' : 'text-slate-400 hover:text-slate-200'
+              }`}
+            >
+              7 Dias
+            </button>
+            <button
+              onClick={() => onSelectDateFilter('este_mes')}
+              className={`hidden sm:inline px-2 py-1 rounded font-bold transition ${
+                dateFilter === 'este_mes' ? 'bg-cyan-600 text-white shadow-sm' : 'text-slate-400 hover:text-slate-200'
+              }`}
+            >
+              Este Mês
+            </button>
+            <button
+              onClick={() => onSelectDateFilter('custom')}
+              className={`px-2 py-1 rounded font-bold transition ${
+                dateFilter === 'custom' ? 'bg-cyan-600 text-white shadow-sm' : 'text-slate-400 hover:text-slate-200'
+              }`}
+            >
+              Período
+            </button>
           </div>
-          {datePresets.map(preset => {
-            const isSelected = (filters.datePreset || 'todos') === preset.id;
-            return (
-              <button
-                key={preset.id}
-                onClick={() => onUpdateFilters({ datePreset: preset.id })}
-                className={`px-2.5 py-1 rounded-lg text-xs font-bold transition-all whitespace-nowrap ${
-                  isSelected
-                    ? 'bg-cyan-600 text-white shadow-md shadow-cyan-600/30'
-                    : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/80'
-                }`}
-              >
-                {preset.label}
-              </button>
-            );
-          })}
-        </div>
 
-        {/* Result Counter & Clear */}
-        <div className="flex items-center gap-2 text-xs font-mono ml-auto">
-          <span className="text-slate-400">
-            Exibindo <strong className="text-cyan-400">{totalFiltered}</strong> de <strong className="text-slate-300">{totalAll}</strong>
-          </span>
-          {hasActiveFilters && (
-            <button
-              onClick={onResetFilters}
-              className="px-2.5 py-1 rounded-lg bg-rose-500/10 text-rose-400 border border-rose-500/30 hover:bg-rose-500/20 text-xs font-bold flex items-center gap-1 transition"
-              title="Limpar todos os filtros"
-            >
-              <RotateCcw className="w-3 h-3" />
-              <span>Limpar</span>
-            </button>
+          {/* Custom Date Inputs */}
+          {dateFilter === 'custom' && (
+            <div className="flex items-center gap-1 bg-[#020617] px-2 py-1 rounded-lg border border-slate-800 text-xs">
+              <input
+                type="date"
+                value={customStartDate}
+                onChange={e => onChangeCustomDates(e.target.value, customEndDate)}
+                className="bg-transparent text-slate-200 text-xs outline-none"
+              />
+              <span className="text-slate-500">até</span>
+              <input
+                type="date"
+                value={customEndDate}
+                onChange={e => onChangeCustomDates(customStartDate, e.target.value)}
+                className="bg-transparent text-slate-200 text-xs outline-none"
+              />
+            </div>
           )}
+
+          {/* Marketplace Selector */}
+          <div className="flex items-center bg-[#020617] px-2 py-1 rounded-lg border border-slate-800 text-xs">
+            <ShoppingBag className="w-3.5 h-3.5 text-amber-400 mr-1.5" />
+            <select
+              value={selectedMarketplace}
+              onChange={e => onSelectMarketplace(e.target.value)}
+              className="bg-transparent text-slate-200 text-xs font-semibold outline-none cursor-pointer"
+            >
+              {MARKETPLACES.map(m => (
+                <option key={m.id} value={m.id} className="bg-slate-900 text-white">
+                  {m.label}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          {/* UF Selector */}
+          <div className="flex items-center bg-[#020617] px-2 py-1 rounded-lg border border-slate-800 text-xs">
+            <MapPin className="w-3.5 h-3.5 text-emerald-400 mr-1.5" />
+            <select
+              value={selectedUf}
+              onChange={e => {
+                onSelectUf(e.target.value);
+                if (onSelectCity) onSelectCity('');
+              }}
+              className="bg-transparent text-slate-200 text-xs font-semibold outline-none cursor-pointer"
+            >
+              <option value="Todos" className="bg-slate-900 text-white">Todos os Estados</option>
+              {BRAZIL_UFS.map(uf => (
+                <option key={uf} value={uf} className="bg-slate-900 text-white">
+                  {uf}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          {/* City Selector Connected to IBGE API */}
+          {onSelectCity && (
+            <div className="w-48 sm:w-56">
+              <CityAutocompleteIBGE
+                value={selectedCity}
+                selectedUf={selectedUf}
+                onChangeCity={(c, uf) => {
+                  onSelectCity(c);
+                  if (uf && selectedUf === 'Todos') {
+                    onSelectUf(uf);
+                  }
+                }}
+                placeholder="Município (IBGE)..."
+              />
+            </div>
+          )}
+
+          {/* Color Selector */}
+          <div className="hidden md:flex items-center bg-[#020617] px-2 py-1 rounded-lg border border-slate-800 text-xs">
+            <Palette className="w-3.5 h-3.5 text-purple-400 mr-1.5" />
+            <select
+              value={selectedColor}
+              onChange={e => onSelectColor(e.target.value)}
+              className="bg-transparent text-slate-200 text-xs font-semibold outline-none cursor-pointer"
+            >
+              {COLORS.map(c => (
+                <option key={c} value={c} className="bg-slate-900 text-white">
+                  {c === 'Todas' ? 'Todas as Cores' : c}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          {/* Status Selector */}
+          <div className="hidden lg:flex items-center bg-[#020617] px-2 py-1 rounded-lg border border-slate-800 text-xs">
+            <CheckCircle2 className="w-3.5 h-3.5 text-cyan-400 mr-1.5" />
+            <select
+              value={selectedStatus}
+              onChange={e => onSelectStatus(e.target.value)}
+              className="bg-transparent text-slate-200 text-xs font-semibold outline-none cursor-pointer"
+            >
+              <option value="Todos" className="bg-slate-900 text-white">Todos os Status</option>
+              <option value="Processado" className="bg-slate-900 text-white">Processado</option>
+              <option value="Auditado" className="bg-slate-900 text-white">Auditado</option>
+              <option value="Pendente" className="bg-slate-900 text-white">Pendente</option>
+            </select>
+          </div>
+
+        </div>
+
+        {/* Right: Search & Counter */}
+        <div className="flex items-center gap-2 w-full sm:w-auto justify-between sm:justify-end">
+          
+          {/* Instant Search Query */}
+          <div className="relative flex-1 sm:w-56">
+            <Search className="w-3.5 h-3.5 text-slate-400 absolute left-2.5 top-1/2 -translate-y-1/2" />
+            <input
+              type="text"
+              placeholder="Buscar cliente, CPF, fatura..."
+              value={searchQuery}
+              onChange={e => onSearchChange(e.target.value)}
+              className="w-full bg-[#020617] text-slate-100 placeholder-slate-500 text-xs pl-8 pr-3 py-1.5 rounded-lg border border-slate-800 focus:border-cyan-500 outline-none transition"
+            />
+          </div>
+
+          {/* Filter Counter Badge */}
+          <div className="flex items-center gap-1.5 shrink-0">
+            <span className="text-[11px] font-mono px-2 py-1 rounded-md bg-slate-800/80 border border-slate-700/60 text-slate-300">
+              <strong className="text-cyan-400 font-bold">{totalFiltered}</strong> / {totalRaw} NFs
+            </span>
+
+            {/* Reset Button */}
+            {isFiltered && (
+              <button
+                onClick={onResetFilters}
+                className="p-1.5 rounded-lg bg-rose-950/60 hover:bg-rose-900 text-rose-300 border border-rose-500/40 transition"
+                title="Limpar todos os filtros"
+              >
+                <RotateCcw className="w-3.5 h-3.5" />
+              </button>
+            )}
+          </div>
+
         </div>
 
       </div>
-
-      {/* Bottom Row: Marketplace chips, Cor chips, UF select */}
-      <div className="flex flex-wrap items-center gap-2 pt-2 border-t border-slate-800/60 text-xs">
-        
-        {/* Marketplace chips */}
-        <div className="flex items-center gap-1 overflow-x-auto scrollbar-none">
-          <span className="text-[10px] uppercase font-bold text-slate-500 tracking-wider mr-1 flex items-center gap-1">
-            <ShoppingBag className="w-3 h-3 text-amber-400" /> Canal:
-          </span>
-          {marketplaces.map(mp => {
-            const isSelected = (filters.origem || 'Todas') === mp;
-            return (
-              <button
-                key={mp}
-                onClick={() => onUpdateFilters({ origem: mp })}
-                className={`px-2.5 py-1 rounded-lg text-[11px] font-bold transition-all ${
-                  isSelected
-                    ? 'bg-amber-500 text-slate-950 shadow-sm'
-                    : 'bg-[#020617] text-slate-400 hover:text-slate-200 border border-slate-800'
-                }`}
-              >
-                {mp}
-              </button>
-            );
-          })}
-        </div>
-
-        {/* Cor chips */}
-        <div className="flex items-center gap-1 overflow-x-auto scrollbar-none ml-0 sm:ml-2">
-          <span className="text-[10px] uppercase font-bold text-slate-500 tracking-wider mr-1 flex items-center gap-1">
-            <Tag className="w-3 h-3 text-purple-400" /> Cor:
-          </span>
-          {cores.map(cor => {
-            const isSelected = (filters.cor || 'Todas') === cor;
-            return (
-              <button
-                key={cor}
-                onClick={() => onUpdateFilters({ cor })}
-                className={`px-2.5 py-1 rounded-lg text-[11px] font-bold transition-all ${
-                  isSelected
-                    ? 'bg-purple-500 text-slate-950 shadow-sm'
-                    : 'bg-[#020617] text-slate-400 hover:text-slate-200 border border-slate-800'
-                }`}
-              >
-                {cor}
-              </button>
-            );
-          })}
-        </div>
-
-        {/* UF Select */}
-        <div className="flex items-center gap-1 ml-auto">
-          <span className="text-[10px] uppercase font-bold text-slate-500 tracking-wider flex items-center gap-1">
-            <MapPin className="w-3 h-3 text-blue-400" /> UF:
-          </span>
-          <select
-            value={filters.uf || 'Todos'}
-            onChange={(e) => onUpdateFilters({ uf: e.target.value })}
-            className="bg-[#020617] text-slate-200 border border-slate-800 rounded-lg px-2.5 py-1 text-xs font-mono font-bold focus:outline-none focus:border-cyan-500"
-          >
-            {BRAZIL_UFS.map(uf => (
-              <option key={uf} value={uf}>{uf === 'Todos' ? 'Todos os Estados' : uf}</option>
-            ))}
-          </select>
-        </div>
-
-      </div>
-
     </div>
   );
 };

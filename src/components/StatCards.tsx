@@ -1,235 +1,274 @@
 import React from 'react';
-import { DashboardStats, Invoice } from '../types';
 import {
-  Activity,
-  DollarSign,
   TrendingUp,
+  DollarSign,
+  FileText,
   ShoppingBag,
-  MapPin,
-  Package,
+  Tag,
+  Percent,
   Layers,
   Sparkles,
   ArrowUpRight,
-  ShieldCheck
+  ShieldCheck,
+  Building2,
+  CheckCircle2
 } from 'lucide-react';
+import { Invoice } from '../types';
 
 interface StatCardsProps {
-  stats: DashboardStats | null;
   invoices: Invoice[];
-  activeMarketplaceFilter?: string;
   onSelectMarketplaceFilter?: (marketplace: string) => void;
+  activeMarketplaceFilter?: string;
+  onSelectStatusFilter?: (status: string) => void;
+  activeStatusFilter?: string;
 }
 
 export const StatCards: React.FC<StatCardsProps> = ({
-  stats,
   invoices,
+  onSelectMarketplaceFilter,
   activeMarketplaceFilter,
-  onSelectMarketplaceFilter
+  onSelectStatusFilter,
+  activeStatusFilter
 }) => {
-  const totalNotas = stats?.totalNotas ?? invoices.length;
-  const totalFaturamento = stats?.totalFaturamento ?? 0;
-  const ticketMedio = stats?.ticketMedio ?? (totalNotas > 0 ? totalFaturamento / totalNotas : 0);
-  const totalItens = stats?.totalItens ?? invoices.reduce((acc, i) => acc + (parseInt(i.quantidade, 10) || 1), 0);
+  // Helper to parse numbers in currency or plain string
+  const parseNum = (val: string | number | undefined): number => {
+    if (!val) return 0;
+    if (typeof val === 'number') return val;
+    const clean = val.replace(/[^\d,\.-]/g, '').replace(/\./g, '').replace(',', '.');
+    const n = parseFloat(clean);
+    return isNaN(n) ? 0 : n;
+  };
 
-  // Top marketplace calculation
-  let topMarketplace = 'Shopee';
-  let topMarketplaceCount = 0;
-  if (stats?.marketplacesCount) {
-    Object.entries(stats.marketplacesCount).forEach(([mp, rawCount]) => {
-      const count = Number(rawCount) || 0;
-      if (count > topMarketplaceCount) {
-        topMarketplaceCount = count;
-        topMarketplace = mp;
-      }
-    });
-  }
+  let totalFaturamento = 0;
+  let totalDescontos = 0;
+  let totalItens = 0;
+  let processadasCount = 0;
+  let auditadasCount = 0;
+  let pendentesCount = 0;
 
-  // Geographic coverage
-  const uniqueUFs = new Set(invoices.map(i => i.uf).filter(Boolean)).size;
-  const uniqueCities = new Set(invoices.map(i => i.municipio).filter(Boolean)).size;
+  const marketplaceCounts: Record<string, { count: number; total: number }> = {
+    Shopee: { count: 0, total: 0 },
+    'Mercado Livre': { count: 0, total: 0 },
+    TikTok: { count: 0, total: 0 },
+    WhatsApp: { count: 0, total: 0 },
+    Outros: { count: 0, total: 0 }
+  };
 
-  const formatBRL = (val: number) => {
-    return new Intl.NumberFormat('pt-BR', {
-      style: 'currency',
-      currency: 'BRL'
-    }).format(val);
+  invoices.forEach(inv => {
+    const valNota = parseNum(inv.valorNota);
+    const valDesc = parseNum(inv.desconto);
+    const qtd = parseNum(inv.quantidade) || 1;
+
+    totalFaturamento += valNota;
+    totalDescontos += valDesc;
+    totalItens += qtd;
+
+    if (inv.status === 'Auditado') auditadasCount++;
+    else if (inv.status === 'Pendente') pendentesCount++;
+    else processadasCount++;
+
+    const orig = inv.origem || 'Outros';
+    if (marketplaceCounts[orig]) {
+      marketplaceCounts[orig].count++;
+      marketplaceCounts[orig].total += valNota;
+    } else {
+      marketplaceCounts.Outros.count++;
+      marketplaceCounts.Outros.total += valNota;
+    }
+  });
+
+  const totalNotas = invoices.length;
+  const ticketMedio = totalNotas > 0 ? totalFaturamento / totalNotas : 0;
+  const pctDesconto = totalFaturamento > 0 ? ((totalDescontos / totalFaturamento) * 100).toFixed(1) : '0.0';
+
+  const formatCurrency = (v: number) => {
+    return v.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
   };
 
   return (
-    <div className="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-6 gap-2 sm:gap-3">
+    <div className="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-6 gap-2 sm:gap-2.5 lg:gap-3">
       
-      {/* 1. Total Notas */}
-      <div 
-        onClick={() => onSelectMarketplaceFilter?.('Todas')}
-        className={`bg-[#0f172a]/90 backdrop-blur-md p-3 sm:p-3.5 rounded-2xl border transition-all cursor-pointer shadow-lg hover:border-cyan-500/60 flex flex-col justify-between ${
-          !activeMarketplaceFilter || activeMarketplaceFilter === 'Todas'
-            ? 'border-cyan-500/80 ring-1 ring-cyan-500/40 bg-[#0f172a]'
-            : 'border-slate-800'
+      {/* 1. Faturamento Total */}
+      <div
+        onClick={() => onSelectStatusFilter?.('Todos')}
+        className={`p-3 rounded-xl border bg-gradient-to-br from-[#0c1a30] to-[#080f20] transition cursor-pointer relative overflow-hidden group shadow-lg ${
+          activeStatusFilter === 'Todos'
+            ? 'border-cyan-500 shadow-[0_0_15px_rgba(6,182,212,0.3)]'
+            : 'border-slate-800 hover:border-cyan-500/50'
         }`}
       >
-        <div>
-          <div className="flex items-center justify-between text-slate-400 mb-1">
-            <span className="text-[10px] sm:text-[11px] font-bold uppercase tracking-wider text-slate-400">Total Notas</span>
-            <div className="p-1 rounded-lg bg-cyan-500/10 text-cyan-400 border border-cyan-500/30">
-              <Activity className="w-3.5 h-3.5" />
-            </div>
-          </div>
-          <div className="flex items-baseline gap-1.5">
-            <span className="text-xl sm:text-2xl font-bold font-mono text-white tracking-tight">
-              {totalNotas}
-            </span>
-            <span className="text-[10px] sm:text-xs text-cyan-400 font-medium flex items-center">
-              <ArrowUpRight className="w-3 h-3 mr-0.5" /> Ativas
-            </span>
-          </div>
-          <div className="w-full bg-slate-800 h-1 mt-2 rounded-full overflow-hidden">
-            <div className="bg-gradient-to-r from-cyan-500 to-blue-500 h-full w-full"></div>
+        <div className="flex items-center justify-between mb-1.5">
+          <span className="text-[11px] font-bold uppercase tracking-wider text-slate-400">
+            Faturamento Total
+          </span>
+          <div className="p-1.5 rounded-lg bg-cyan-950/80 border border-cyan-500/40 text-cyan-400">
+            <DollarSign className="w-4 h-4" />
           </div>
         </div>
-        <div className="text-[10px] text-slate-500 mt-2 font-mono flex items-center justify-between">
-          <span>Extraídas e Validadas</span>
-          <span className="text-cyan-400">100%</span>
+        <div className="text-lg sm:text-xl font-extrabold text-white tracking-tight font-mono">
+          {formatCurrency(totalFaturamento)}
         </div>
+        <div className="mt-1.5 flex items-center justify-between text-[10px] text-slate-400">
+          <span className="text-cyan-400 font-bold flex items-center gap-0.5">
+            <TrendingUp className="w-3 h-3 inline" />
+            {totalNotas} NFs
+          </span>
+          <span className="font-mono">100% Auditado</span>
+        </div>
+        <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-gradient-to-r from-cyan-500 to-blue-500" />
       </div>
 
-      {/* 2. Faturamento Total */}
-      <div 
-        className="bg-[#0f172a]/90 backdrop-blur-md p-3 sm:p-3.5 rounded-2xl border border-slate-800 transition-all shadow-lg hover:border-emerald-500/60 flex flex-col justify-between"
+      {/* 2. Total de Notas Fiscais */}
+      <div
+        onClick={() => onSelectStatusFilter?.('Processado')}
+        className={`p-3 rounded-xl border bg-gradient-to-br from-[#0b1e1b] to-[#071310] transition cursor-pointer relative overflow-hidden group shadow-lg ${
+          activeStatusFilter === 'Processado'
+            ? 'border-emerald-500 shadow-[0_0_15px_rgba(16,185,129,0.3)]'
+            : 'border-slate-800 hover:border-emerald-500/50'
+        }`}
       >
-        <div>
-          <div className="flex items-center justify-between text-slate-400 mb-1">
-            <span className="text-[10px] sm:text-[11px] font-bold uppercase tracking-wider text-slate-400">Faturamento</span>
-            <div className="p-1 rounded-lg bg-emerald-500/10 text-emerald-400 border border-emerald-500/30">
-              <DollarSign className="w-3.5 h-3.5" />
-            </div>
-          </div>
-          <div className="flex items-baseline gap-1">
-            <span className="text-lg sm:text-xl font-bold font-mono text-emerald-400 tracking-tight truncate">
-              {formatBRL(totalFaturamento)}
-            </span>
-          </div>
-          <div className="w-full bg-slate-800 h-1 mt-2 rounded-full overflow-hidden">
-            <div className="bg-gradient-to-r from-emerald-500 to-teal-400 h-full w-full"></div>
+        <div className="flex items-center justify-between mb-1.5">
+          <span className="text-[11px] font-bold uppercase tracking-wider text-slate-400">
+            Notas Emitidas
+          </span>
+          <div className="p-1.5 rounded-lg bg-emerald-950/80 border border-emerald-500/40 text-emerald-400">
+            <FileText className="w-4 h-4" />
           </div>
         </div>
-        <div className="text-[10px] text-slate-500 mt-2 font-mono flex items-center justify-between">
-          <span>Valor Bruto NF-e</span>
-          <span className="text-emerald-400">Sincronizado</span>
+        <div className="text-lg sm:text-xl font-extrabold text-emerald-300 tracking-tight font-mono">
+          {totalNotas}
         </div>
+        <div className="mt-1.5 flex items-center justify-between text-[10px] text-slate-400">
+          <span className="text-emerald-400 font-semibold">{processadasCount} Processadas</span>
+          <span>{auditadasCount} Auditadas</span>
+        </div>
+        <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-gradient-to-r from-emerald-500 to-teal-500" />
       </div>
 
       {/* 3. Ticket Médio */}
-      <div 
-        className="bg-[#0f172a]/90 backdrop-blur-md p-3 sm:p-3.5 rounded-2xl border border-slate-800 transition-all shadow-lg hover:border-purple-500/60 flex flex-col justify-between"
-      >
-        <div>
-          <div className="flex items-center justify-between text-slate-400 mb-1">
-            <span className="text-[10px] sm:text-[11px] font-bold uppercase tracking-wider text-slate-400">Ticket Médio</span>
-            <div className="p-1 rounded-lg bg-purple-500/10 text-purple-400 border border-purple-500/30">
-              <TrendingUp className="w-3.5 h-3.5" />
-            </div>
-          </div>
-          <div className="flex items-baseline gap-1">
-            <span className="text-lg sm:text-xl font-bold font-mono text-purple-300 tracking-tight truncate">
-              {formatBRL(ticketMedio)}
-            </span>
-          </div>
-          <div className="w-full bg-slate-800 h-1 mt-2 rounded-full overflow-hidden">
-            <div className="bg-gradient-to-r from-purple-500 to-pink-500 h-full w-4/5"></div>
+      <div className="p-3 rounded-xl border border-slate-800 bg-gradient-to-br from-[#1a170b] to-[#120f06] relative overflow-hidden shadow-lg hover:border-amber-500/50 transition">
+        <div className="flex items-center justify-between mb-1.5">
+          <span className="text-[11px] font-bold uppercase tracking-wider text-slate-400">
+            Ticket Médio
+          </span>
+          <div className="p-1.5 rounded-lg bg-amber-950/80 border border-amber-500/40 text-amber-400">
+            <Tag className="w-4 h-4" />
           </div>
         </div>
-        <div className="text-[10px] text-slate-500 mt-2 font-mono flex items-center justify-between">
-          <span>Média por DANFE</span>
-          <span className="text-purple-400">Estável</span>
+        <div className="text-lg sm:text-xl font-extrabold text-amber-300 tracking-tight font-mono">
+          {formatCurrency(ticketMedio)}
         </div>
+        <div className="mt-1.5 flex items-center justify-between text-[10px] text-slate-400">
+          <span>Média por Venda</span>
+          <span className="text-amber-400 font-mono font-bold">SPM Store</span>
+        </div>
+        <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-gradient-to-r from-amber-500 to-yellow-500" />
       </div>
 
-      {/* 4. Canal Líder */}
-      <div 
-        onClick={() => onSelectMarketplaceFilter?.(topMarketplace)}
-        className="bg-[#0f172a]/90 backdrop-blur-md p-3 sm:p-3.5 rounded-2xl border border-slate-800 transition-all cursor-pointer shadow-lg hover:border-amber-500/60 flex flex-col justify-between"
-      >
-        <div>
-          <div className="flex items-center justify-between text-slate-400 mb-1">
-            <span className="text-[10px] sm:text-[11px] font-bold uppercase tracking-wider text-slate-400">Canal Líder</span>
-            <div className="p-1 rounded-lg bg-amber-500/10 text-amber-400 border border-amber-500/30">
-              <ShoppingBag className="w-3.5 h-3.5" />
-            </div>
-          </div>
-          <div className="flex items-baseline gap-1.5">
-            <span className="text-base sm:text-lg font-bold text-amber-300 tracking-tight truncate">
-              {topMarketplace}
-            </span>
-            <span className="text-[10px] sm:text-xs text-amber-400 font-mono font-bold">
-              ({topMarketplaceCount} NFs)
-            </span>
-          </div>
-          <div className="w-full bg-slate-800 h-1 mt-2 rounded-full overflow-hidden">
-            <div className="bg-gradient-to-r from-amber-500 to-orange-500 h-full w-3/4"></div>
+      {/* 4. Total de Itens Vendidos */}
+      <div className="p-3 rounded-xl border border-slate-800 bg-gradient-to-br from-[#180e29] to-[#0f091a] relative overflow-hidden shadow-lg hover:border-purple-500/50 transition">
+        <div className="flex items-center justify-between mb-1.5">
+          <span className="text-[11px] font-bold uppercase tracking-wider text-slate-400">
+            Itens Faturados
+          </span>
+          <div className="p-1.5 rounded-lg bg-purple-950/80 border border-purple-500/40 text-purple-400">
+            <ShoppingBag className="w-4 h-4" />
           </div>
         </div>
-        <div className="text-[10px] text-slate-500 mt-2 font-mono flex items-center justify-between">
-          <span>Maior Volume</span>
-          <span className="text-amber-400">Filtrar</span>
+        <div className="text-lg sm:text-xl font-extrabold text-purple-300 tracking-tight font-mono">
+          {totalItens.toLocaleString('pt-BR')}
         </div>
+        <div className="mt-1.5 flex items-center justify-between text-[10px] text-slate-400">
+          <span>Unidades Totais</span>
+          <span className="text-purple-400 font-mono">SKUs Fiscais</span>
+        </div>
+        <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-gradient-to-r from-purple-500 to-pink-500" />
       </div>
 
-      {/* 5. Cobertura Geográfica */}
-      <div 
-        className="bg-[#0f172a]/90 backdrop-blur-md p-3 sm:p-3.5 rounded-2xl border border-slate-800 transition-all shadow-lg hover:border-blue-500/60 flex flex-col justify-between"
-      >
-        <div>
-          <div className="flex items-center justify-between text-slate-400 mb-1">
-            <span className="text-[10px] sm:text-[11px] font-bold uppercase tracking-wider text-slate-400">Cidades / UFs</span>
-            <div className="p-1 rounded-lg bg-blue-500/10 text-blue-400 border border-blue-500/30">
-              <MapPin className="w-3.5 h-3.5" />
-            </div>
-          </div>
-          <div className="flex items-baseline gap-1.5">
-            <span className="text-lg sm:text-xl font-bold font-mono text-blue-300 tracking-tight">
-              {uniqueCities}
-            </span>
-            <span className="text-[10px] sm:text-xs text-slate-400 font-medium">
-              em {uniqueUFs} estados
-            </span>
-          </div>
-          <div className="w-full bg-slate-800 h-1 mt-2 rounded-full overflow-hidden">
-            <div className="bg-gradient-to-r from-blue-500 to-indigo-500 h-full w-5/6"></div>
+      {/* 5. Descontos Concedidos */}
+      <div className="p-3 rounded-xl border border-slate-800 bg-gradient-to-br from-[#1c0d16] to-[#12070e] relative overflow-hidden shadow-lg hover:border-rose-500/50 transition">
+        <div className="flex items-center justify-between mb-1.5">
+          <span className="text-[11px] font-bold uppercase tracking-wider text-slate-400">
+            Descontos NFs
+          </span>
+          <div className="p-1.5 rounded-lg bg-rose-950/80 border border-rose-500/40 text-rose-400">
+            <Percent className="w-4 h-4" />
           </div>
         </div>
-        <div className="text-[10px] text-slate-500 mt-2 font-mono flex items-center justify-between">
-          <span>Alcance Nacional</span>
-          <span className="text-blue-400">Brasil</span>
+        <div className="text-lg sm:text-xl font-extrabold text-rose-300 tracking-tight font-mono">
+          {formatCurrency(totalDescontos)}
         </div>
+        <div className="mt-1.5 flex items-center justify-between text-[10px] text-slate-400">
+          <span className="text-rose-400 font-bold">{pctDesconto}% do Total</span>
+          <span>Campanhas</span>
+        </div>
+        <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-gradient-to-r from-rose-500 to-red-500" />
       </div>
 
-      {/* 6. Total Peças & Itens */}
-      <div 
-        className="bg-[#0f172a]/90 backdrop-blur-md p-3 sm:p-3.5 rounded-2xl border border-slate-800 transition-all shadow-lg hover:border-teal-500/60 flex flex-col justify-between"
-      >
-        <div>
-          <div className="flex items-center justify-between text-slate-400 mb-1">
-            <span className="text-[10px] sm:text-[11px] font-bold uppercase tracking-wider text-slate-400">Itens / Peças</span>
-            <div className="p-1 rounded-lg bg-teal-500/10 text-teal-400 border border-teal-500/30">
-              <Package className="w-3.5 h-3.5" />
-            </div>
-          </div>
-          <div className="flex items-baseline gap-1.5">
-            <span className="text-xl sm:text-2xl font-bold font-mono text-teal-300 tracking-tight">
-              {totalItens}
-            </span>
-            <span className="text-[10px] sm:text-xs text-teal-400 font-medium">
-              unidades
-            </span>
-          </div>
-          <div className="w-full bg-slate-800 h-1 mt-2 rounded-full overflow-hidden">
-            <div className="bg-gradient-to-r from-teal-500 to-cyan-400 h-full w-full"></div>
+      {/* 6. Marketplaces (Shopee / ML / TikTok) */}
+      <div className="p-3 rounded-xl border border-slate-800 bg-gradient-to-br from-[#0c1626] to-[#070e1a] relative overflow-hidden shadow-lg hover:border-blue-500/50 transition">
+        <div className="flex items-center justify-between mb-1.5">
+          <span className="text-[11px] font-bold uppercase tracking-wider text-slate-400">
+            Canais de Venda
+          </span>
+          <div className="p-1.5 rounded-lg bg-blue-950/80 border border-blue-500/40 text-blue-400">
+            <Layers className="w-4 h-4" />
           </div>
         </div>
-        <div className="text-[10px] text-slate-500 mt-2 font-mono flex items-center justify-between">
-          <span>Estoque Faturado</span>
-          <span className="text-teal-400">OK</span>
+        <div className="flex flex-wrap items-center gap-1 mt-0.5">
+          <button
+            onClick={() => onSelectMarketplaceFilter?.('Shopee')}
+            className={`px-1.5 py-0.5 rounded text-[10px] font-extrabold transition ${
+              activeMarketplaceFilter === 'Shopee'
+                ? 'bg-orange-500 text-white'
+                : 'bg-orange-950/80 text-orange-400 border border-orange-500/30 hover:bg-orange-900'
+            }`}
+            title="Filtrar Shopee"
+          >
+            SHP ({marketplaceCounts.Shopee.count})
+          </button>
+          <button
+            onClick={() => onSelectMarketplaceFilter?.('WhatsApp')}
+            className={`px-1.5 py-0.5 rounded text-[10px] font-extrabold transition ${
+              activeMarketplaceFilter === 'WhatsApp'
+                ? 'bg-emerald-500 text-white'
+                : 'bg-emerald-950/80 text-emerald-400 border border-emerald-500/30 hover:bg-emerald-900'
+            }`}
+            title="Filtrar WhatsApp"
+          >
+            WPP ({marketplaceCounts.WhatsApp.count})
+          </button>
+          <button
+            onClick={() => onSelectMarketplaceFilter?.('TikTok')}
+            className={`px-1.5 py-0.5 rounded text-[10px] font-extrabold transition ${
+              activeMarketplaceFilter === 'TikTok'
+                ? 'bg-pink-500 text-white'
+                : 'bg-pink-950/80 text-pink-400 border border-pink-500/30 hover:bg-pink-900'
+            }`}
+            title="Filtrar TikTok"
+          >
+            TT ({marketplaceCounts.TikTok.count})
+          </button>
+          <button
+            onClick={() => onSelectMarketplaceFilter?.('Mercado Livre')}
+            className={`px-1.5 py-0.5 rounded text-[10px] font-extrabold transition ${
+              activeMarketplaceFilter === 'Mercado Livre'
+                ? 'bg-yellow-500 text-slate-950'
+                : 'bg-yellow-950/80 text-yellow-400 border border-yellow-500/30 hover:bg-yellow-900'
+            }`}
+            title="Filtrar Mercado Livre"
+          >
+            ML ({marketplaceCounts['Mercado Livre'].count})
+          </button>
         </div>
+        <div className="mt-1.5 flex items-center justify-between text-[10px] text-slate-400">
+          <span className="truncate">
+            {activeMarketplaceFilter && activeMarketplaceFilter !== 'Todos'
+              ? `${activeMarketplaceFilter}: ${formatCurrency(marketplaceCounts[activeMarketplaceFilter]?.total || 0)}`
+              : `SHP: ${formatCurrency(marketplaceCounts.Shopee.total)}`}
+          </span>
+        </div>
+        <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-gradient-to-r from-blue-500 to-indigo-500" />
       </div>
 
     </div>

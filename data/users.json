@@ -5,17 +5,8 @@
     "email": "josegaldino@hotmail.com.br",
     "role": "ADMIN",
     "active": true,
-    "lastLogin": "2026-08-23T18:05:04.071Z",
+    "lastLogin": "2026-09-11T00:59:52.240Z",
     "department": "SPM Store - Diretoria"
-  },
-  {
-    "id": "u-gerente-1",
-    "name": "Carlos Santos",
-    "email": "gerente@empresa.com",
-    "role": "MANAGER",
-    "active": true,
-    "lastLogin": "2026-08-22T18:05:04.071Z",
-    "department": "Faturamento"
   },
   {
     "id": "u-auditor-1",

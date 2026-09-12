@@ -1,87 +1,63 @@
-version: '3.8'
-
 services:
-  # 1. Banco de Dados MySQL (com importação automática do schema e dados)
-  mysql:
+  spm-mysql:
     image: mysql:8.0
     container_name: spm-mysql
-    restart: unless-stopped
+    restart: always
     environment:
-      MYSQL_ROOT_PASSWORD: ${DB_PASSWORD:-root123}
+      MYSQL_ROOT_PASSWORD: ${DB_PASSWORD:-spm_fiscal_root_pass_2026!}
       MYSQL_DATABASE: ${DB_NAME:-spm_fiscal}
       TZ: America/Sao_Paulo
-    ports:
-      - "3306:3306"
     volumes:
       - spm_mysql_data:/var/lib/mysql
-      - ./database_spm_fiscal.sql:/docker-entrypoint-initdb.d/01_init.sql:ro
-    networks:
-      - spm_rede
+    ports:
+      - "3306:3306"
     healthcheck:
       test: ["CMD", "mysqladmin", "ping", "-h", "localhost"]
       interval: 10s
       timeout: 5s
-      retries: 5
+      retries: 10
+      start_period: 20s
 
-  # 2. Aplicação SPM Store Sistema Fiscal
   spm-fiscal:
-    image: spm-fiscal-app:latest
     build:
       context: .
       dockerfile: Dockerfile
-    container_name: spm-store-fiscal
-    restart: unless-stopped
+    image: spm-fiscal:latest
+    container_name: spm-fiscal
+    restart: always
     ports:
       - "3000:3000"
     environment:
-      - NODE_ENV=production
-      - PORT=3000
-      - DB_HOST=mysql
-      - DB_PORT=3306
-      - DB_USER=root
-      - DB_PASSWORD=${DB_PASSWORD:-root123}
-      - DB_NAME=${DB_NAME:-spm_fiscal}
-      - JWT_SECRET=${JWT_SECRET:-spm_store_chave_secreta_jwt_producao_2026}
+      NODE_ENV: production
+      PORT: "3000"
+      DB_HOST: spm-mysql
+      DB_PORT: "3306"
+      DB_USER: root
+      DB_PASSWORD: ${DB_PASSWORD:-spm_fiscal_root_pass_2026!}
+      DB_NAME: ${DB_NAME:-spm_fiscal}
+      JWT_SECRET: ${JWT_SECRET:-spm_store_chave_secreta_jwt_producao_2026_fiscal_elite}
+      APP_URL: ${APP_URL:-https://fiscal.spmoficial.com.br}
+      TZ: America/Sao_Paulo
     volumes:
       - spm_notas_fiscais:/app/Notas_Fiscais
       - spm_data:/app/data
-    networks:
-      - spm_rede
+      - spm_uploads:/app/uploads
     depends_on:
-      mysql:
+      spm-mysql:
         condition: service_healthy
-    deploy:
-      replicas: 1
-      restart_policy:
-        condition: on-failure
-        delay: 5s
-        max_attempts: 3
     healthcheck:
-      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:3000/api/health"]
+      test: ["CMD", "node", "-e", "fetch('http://localhost:3000/api/health').then(r => r.ok ? process.exit(0) : process.exit(1)).catch(() => process.exit(1))"]
       interval: 30s
       timeout: 10s
-      retries: 3
-      start_period: 20s
-
-  # 3. Conector Cloudflare Tunnel (HTTPS e Domínio Automático)
-  cloudflared:
-    image: cloudflare/cloudflared:latest
-    container_name: spm-cloudflare-tunnel
-    restart: unless-stopped
-    command: tunnel --no-autoupdate run --token ${CLOUDFLARE_TUNNEL_TOKEN:-red-field-3bb4}
-    networks:
-      - spm_rede
-    depends_on:
-      - spm-fiscal
+      retries: 5
+      start_period: 25s
 
 volumes:
+  spm_mysql_data:
+    driver: local
   spm_notas_fiscais:
     driver: local
   spm_data:
     driver: local
-  spm_mysql_data:
+  spm_uploads:
     driver: local
-
-networks:
-  spm_rede:
-    driver: bridge

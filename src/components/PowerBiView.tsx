@@ -1,16 +1,15 @@
 import React, { useState } from 'react';
-import { 
-  BarChart3, 
-  Copy, 
-  Check, 
-  Sparkles, 
-  Clock, 
-  RefreshCw, 
-  ExternalLink, 
-  CheckCircle2, 
+import {
+  BarChart3,
+  Copy,
+  Check,
+  Sparkles,
+  Clock,
+  RefreshCw,
+  ExternalLink,
+  CheckCircle2,
   Database,
-  Code,
-  Layers
+  Code
 } from 'lucide-react';
 import { PowerBiConfig } from '../types';
 
@@ -52,77 +51,113 @@ in
 
   return (
     <div className="space-y-6">
-      
+
       {/* Header */}
-      <div className="bg-[#0f172a]/95 backdrop-blur-md border border-slate-800 p-4 sm:p-6 rounded-2xl shadow-xl flex flex-col md:flex-row md:items-center justify-between gap-4">
+      <div className="bg-white border border-slate-200 p-5 rounded-xl shadow-sm flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
-          <div className="flex items-center gap-2 mb-1">
-            <span className="px-2.5 py-0.5 rounded-full bg-amber-500/10 text-amber-400 border border-amber-500/30 text-[10px] font-mono font-bold uppercase tracking-wider flex items-center gap-1">
-              <Layers className="w-3 h-3 text-amber-400" /> Microsoft Power BI REST API
+          <div className="flex items-center space-x-2">
+            <h2 className="text-xl font-bold text-slate-900 tracking-tight flex items-center space-x-2">
+              <BarChart3 className="w-5 h-5 text-amber-500" />
+              <span>Conexão & Atualização Power BI (17 Campos SPM Store)</span>
+            </h2>
+            <span className="bg-amber-50 text-amber-800 border border-amber-200 px-2 py-0.5 rounded text-[11px] font-bold">
+              JSON REST API Feed
             </span>
           </div>
-          <h2 className="text-xl sm:text-2xl font-extrabold text-white tracking-tight">
-            Integração com Microsoft Power BI Desktop & Web
-          </h2>
-          <p className="text-slate-400 text-xs mt-1">
-            Alimente seus relatórios e dashboards analíticos em tempo real via endpoint JSON com atualização incremental.
+          <p className="text-slate-500 text-xs mt-1">
+            Conecte o Power BI diretamente ao seu banco de dados para relatórios visuais automatizados e atualizações agendadas.
           </p>
         </div>
 
-        <div className="flex items-center gap-2">
-          <span className="px-3 py-1.5 rounded-xl bg-[#020617] border border-slate-800 text-xs font-mono text-emerald-400 flex items-center gap-1.5">
-            <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" />
-            <span>Feed Ativo ({invoicesCount} registros)</span>
-          </span>
+        <div className="flex items-center space-x-2">
+          <a
+            href={feedUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="flex items-center space-x-1.5 px-3 py-2 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 border border-slate-200 text-xs font-bold transition shadow-sm"
+          >
+            <span>Testar Feed JSON</span>
+            <ExternalLink className="w-3.5 h-3.5" />
+          </a>
         </div>
       </div>
 
-      {/* Connection Endpoint Box */}
-      <div className="bg-[#0f172a]/95 backdrop-blur-md border border-slate-800 p-4 sm:p-6 rounded-2xl shadow-xl space-y-4">
-        <h3 className="font-bold text-white text-base flex items-center gap-2">
-          <Database className="w-4 h-4 text-amber-400" />
-          <span>URL do Feed OData / REST JSON</span>
-        </h3>
-        <p className="text-xs text-slate-400">
-          No Power BI Desktop, selecione <strong>Obter Dados &gt; Da Web</strong> e cole a URL abaixo:
-        </p>
+      {/* Main Endpoint & Connection Cards */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
 
-        <div className="flex items-center gap-2 bg-[#020617] border border-slate-800 rounded-xl p-2.5">
-          <input
-            type="text"
-            readOnly
-            value={feedUrl}
-            className="w-full bg-transparent text-xs font-mono text-cyan-400 outline-none select-all"
-          />
-          <button
-            onClick={handleCopyFeed}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-cyan-600 hover:bg-cyan-500 text-white text-xs font-bold transition shrink-0"
-          >
-            {copiedFeed ? <Check className="w-3.5 h-3.5" /> : <Copy className="w-3.5 h-3.5" />}
-            <span>{copiedFeed ? 'Copiado!' : 'Copiar URL'}</span>
-          </button>
+        {/* Endpoint Box */}
+        <div className="bg-white border border-slate-200 p-5 rounded-xl shadow-sm space-y-4">
+          <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+            <h3 className="font-bold text-slate-900 text-sm flex items-center space-x-2">
+              <Sparkles className="w-4 h-4 text-amber-500" />
+              <span>URL do Feed em Tempo Real para Power BI</span>
+            </h3>
+            <span className="text-[10px] text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200 font-mono font-bold">
+              {invoicesCount} registros disponíveis
+            </span>
+          </div>
+
+          <div>
+            <label className="block text-xs font-semibold text-slate-600 mb-1">
+              Cole esta URL no Power BI Desktop &gt; Obter Dados &gt; Da Web:
+            </label>
+            <div className="flex items-center space-x-2">
+              <input
+                type="text"
+                readOnly
+                value={feedUrl}
+                className="w-full bg-slate-50 border border-slate-200 text-slate-800 rounded-lg p-2.5 font-mono text-xs outline-none select-all"
+              />
+              <button
+                onClick={handleCopyFeed}
+                className="px-3 py-2.5 rounded-lg bg-slate-900 hover:bg-slate-800 text-white font-bold text-xs transition shrink-0 flex items-center space-x-1"
+              >
+                {copiedFeed ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Copy className="w-3.5 h-3.5" />}
+                <span>{copiedFeed ? 'Copiado' : 'Copiar'}</span>
+              </button>
+            </div>
+          </div>
+
+          <div className="p-3 bg-amber-50 border border-amber-200 rounded-lg text-amber-900 text-xs space-y-1">
+            <p className="font-bold flex items-center space-x-1">
+              <Clock className="w-3.5 h-3.5" />
+              <span>Configuração da Atualização Agendada:</span>
+            </p>
+            <p>1. No Power BI Service na Nuvem, acesse o conjunto de dados (Dataset).</p>
+            <p>2. Configure a frequência de atualização para <strong>A cada 15 ou 30 minutos</strong>.</p>
+          </div>
         </div>
-      </div>
 
-      {/* Power Query M Code */}
-      <div className="bg-[#0f172a]/95 backdrop-blur-md border border-slate-800 p-4 sm:p-6 rounded-2xl shadow-xl space-y-4">
-        <div className="flex items-center justify-between">
-          <h3 className="font-bold text-white text-base flex items-center gap-2">
-            <Code className="w-4 h-4 text-cyan-400" />
-            <span>Script Power Query (Linguagem M)</span>
-          </h3>
-          <button
-            onClick={handleCopyMCode}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-bold transition border border-slate-700"
-          >
-            {copiedCode ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Copy className="w-3.5 h-3.5" />}
-            <span>{copiedCode ? 'Código Copiado!' : 'Copiar Script M'}</span>
-          </button>
+        {/* Power Query M Code Box */}
+        <div className="bg-white border border-slate-200 p-5 rounded-xl shadow-sm space-y-4">
+          <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+            <h3 className="font-bold text-slate-900 text-sm flex items-center space-x-2">
+              <Code className="w-4 h-4 text-blue-600" />
+              <span>Código Power Query (Editor Avançado)</span>
+            </h3>
+            <button
+              onClick={handleCopyMCode}
+              className="flex items-center space-x-1 px-2.5 py-1 rounded bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold transition border border-slate-200"
+            >
+              {copiedCode ? (
+                <>
+                  <Check className="w-3.5 h-3.5 text-emerald-600" />
+                  <span className="text-emerald-600">Copiado!</span>
+                </>
+              ) : (
+                <>
+                  <Copy className="w-3.5 h-3.5" />
+                  <span>Copiar M Code</span>
+                </>
+              )}
+            </button>
+          </div>
+
+          <div className="bg-[#0F172A] p-3 rounded-lg text-[11px] font-mono text-emerald-400 overflow-x-auto max-h-48 border border-slate-800">
+            <pre>{powerQueryMCode}</pre>
+          </div>
         </div>
 
-        <pre className="bg-[#020617] border border-slate-800 rounded-xl p-4 text-xs font-mono text-slate-300 overflow-x-auto">
-          {powerQueryMCode}
-        </pre>
       </div>
 
     </div>

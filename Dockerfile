@@ -1,46 +1,42 @@
-# Multi-stage Dockerfile para SPM Store Sistema Fiscal
-FROM node:22-alpine AS builder
+# Multi-stage Dockerfile para SPM Store Sistema Fiscal (Linux Debian-slim)
+FROM node:22-slim AS builder
 
 WORKDIR /app
 
-# Copia arquivos de dependências
-COPY package.json bun.lock* package-lock.json* ./
+# Instala ferramentas nativas de compilação do Debian
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    python3 \
+    make \
+    g++ \
+    && rm -rf /var/lib/apt/lists/*
 
-# Instala todas as dependências (incluindo devDependencies para o build)
+# Copia dependências e instala tudo para o build
+COPY package*.json ./
 RUN npm install
 
-# Copia o código-fonte da aplicação
+# Copia o código-fonte e compila (Vite + esbuild para dist/server.cjs)
 COPY . .
-
-# Executa o build de produção (Vite + esbuild)
 RUN npm run build
 
-# Stage de Produção
-FROM node:22-alpine AS runner
+# Estágio de execução (Runner de Produção)
+FROM node:22-slim AS runner
 
 WORKDIR /app
 
 ENV NODE_ENV=production
-ENV PORT=3000
 
-# Instala apenas dependências de produção
-COPY package.json bun.lock* package-lock.json* ./
-RUN npm install --omit=dev
-
-# Copia o bundle compilado do servidor e os assets estáticos do frontend
+# Copia as dependências, servidor, assets compilados e arquivos de dados
+COPY package*.json ./
+COPY server.js ./
+COPY --from=builder /app/node_modules ./node_modules
 COPY --from=builder /app/dist ./dist
+COPY --from=builder /app/data ./data
+COPY --from=builder /app/database_spm_fiscal.sql ./database_spm_fiscal.sql
 COPY --from=builder /app/public ./public
-COPY --from=builder /app/src/lib/pdfParser.ts ./src/lib/pdfParser.ts
 
-# Cria pastas para uploads e armazenamento persistente de notas fiscais
-RUN mkdir -p uploads Notas_Fiscais data
+# Garante a existência dos diretórios de dados e uploads
+RUN mkdir -p /app/uploads /app/Notas_Fiscais /app/data
 
-# Expõe a porta do servidor
 EXPOSE 3000
 
-# Healthcheck
-HEALTHCHECK --interval=30s --timeout=10s --retries=3 \
-  CMD wget --no-verbose --tries=1 --spider http://localhost:3000/api/health || exit 1
-
-# Inicia o servidor Node.js
-CMD ["node", "dist/server.cjs"]
+CMD ["npm", "start"]

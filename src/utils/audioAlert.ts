@@ -1,8 +1,6 @@
 /**
- * Audio Alert System for SPM Fiscal using Web Audio API
- * No external mp3 files required - 100% synthesized in browser.
+ * Audio Alert Utility using Web Audio API for Real-Time Sound Notifications
  */
-
 let audioCtx: AudioContext | null = null;
 
 function getAudioContext(): AudioContext | null {
@@ -20,9 +18,9 @@ function getAudioContext(): AudioContext | null {
 }
 
 /**
- * Play a pleasant two-tone chime for new invoice extraction / sync success
+ * Play a pleasant crystal chime when a new invoice is processed
  */
-export function playAttendanceChime() {
+export function playInvoiceChime() {
   try {
     const ctx = getAudioContext();
     if (!ctx) return;
@@ -36,7 +34,7 @@ export function playAttendanceChime() {
     osc1.frequency.setValueAtTime(523.25, now);
     
     gain1.gain.setValueAtTime(0.001, now);
-    gain1.gain.exponentialRampToValueAtTime(0.18, now + 0.04);
+    gain1.gain.exponentialRampToValueAtTime(0.2, now + 0.04);
     gain1.gain.exponentialRampToValueAtTime(0.001, now + 0.35);
 
     osc1.connect(gain1);
@@ -51,7 +49,7 @@ export function playAttendanceChime() {
     osc2.frequency.setValueAtTime(659.25, now + 0.12);
 
     gain2.gain.setValueAtTime(0.001, now + 0.12);
-    gain2.gain.exponentialRampToValueAtTime(0.22, now + 0.16);
+    gain2.gain.exponentialRampToValueAtTime(0.25, now + 0.16);
     gain2.gain.exponentialRampToValueAtTime(0.001, now + 0.65);
 
     osc2.connect(gain2);
@@ -59,14 +57,14 @@ export function playAttendanceChime() {
     osc2.start(now + 0.12);
     osc2.stop(now + 0.65);
 
-    // Third tone (1046.5 Hz = C6)
+    // Third high harmonic tone (1046.5 Hz = C6)
     const osc3 = ctx.createOscillator();
     const gain3 = ctx.createGain();
     osc3.type = 'sine';
     osc3.frequency.setValueAtTime(1046.5, now + 0.24);
 
     gain3.gain.setValueAtTime(0.001, now + 0.24);
-    gain3.gain.exponentialRampToValueAtTime(0.16, now + 0.28);
+    gain3.gain.exponentialRampToValueAtTime(0.18, now + 0.28);
     gain3.gain.exponentialRampToValueAtTime(0.001, now + 0.85);
 
     osc3.connect(gain3);
@@ -74,12 +72,12 @@ export function playAttendanceChime() {
     osc3.start(now + 0.24);
     osc3.stop(now + 0.85);
   } catch {
-    // Gracefully ignore auto-play policies
+    // Gracefully handle browser auto-play restrictions
   }
 }
 
 /**
- * Play an alert sound for urgent / fiscal audit warnings or duplicate detection
+ * Play an alert sound for fiscal anomalies or duplicate invoices
  */
 export function playUrgentAlert() {
   try {
@@ -102,6 +100,9 @@ export function playUrgentAlert() {
     osc.start(now);
     osc.stop(now + 0.4);
   } catch {
-    // Ignore audio restrictions
+    // Ignore audio restriction
   }
 }
+
+export const playAttendanceChime = playInvoiceChime;
+

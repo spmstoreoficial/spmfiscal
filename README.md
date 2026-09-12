@@ -12,31 +12,34 @@ Sistema de Extração, Gestão e Auditoria de Notas Fiscais (DANFE / PDF) com Ba
 
 ---
 
-### 2. Passo a Passo Rápido (1 Clique)
+### 2. Passo a Passo Rápido
 
 1. **Iniciar o MySQL no XAMPP**:
    - Abra o **XAMPP Control Panel** e clique em **Start** no módulo **MySQL**.
 
-2. **Executar pelo arquivo automático**:
-   - Dê um duplo clique no arquivo **[`iniciar.bat`](file:///c:/xampp/htdocs/spmfiscal/iniciar.bat)** ou **[`executar.bat`](file:///c:/xampp/htdocs/spmfiscal/executar.bat)**.
-   - O script verifica automaticamente o Node.js, configura o `.env`, instala dependências se necessário, inicia o servidor e abre o navegador em `http://localhost:3000`.
+2. **Configurar as Variáveis de Ambiente**:
+   - O arquivo `.env` já vem pré-configurado para o XAMPP:
+     ```env
+     DB_HOST=localhost
+     DB_PORT=3306
+     DB_USER=root
+     DB_PASSWORD=
+     DB_NAME=spm_fiscal
+     ```
+   - O sistema cria o banco `spm_fiscal` e todas as tabelas **automaticamente** na primeira execução.
 
----
-
-### 3. Ou Execução Manual via Terminal
-
-1. **Instalar Dependências**:
+3. **Instalar Dependências**:
    ```cmd
    npm install
    ```
 
-2. **Executar em Modo de Desenvolvimento**:
+4. **Executar em Modo de Desenvolvimento**:
    ```cmd
    npm run dev
    ```
    *O sistema estará disponível em:* **`http://localhost:3000`**
 
-3. **Executar em Modo de Produção**:
+5. **Executar em Modo de Produção**:
    ```cmd
    npm run build
    npm start
