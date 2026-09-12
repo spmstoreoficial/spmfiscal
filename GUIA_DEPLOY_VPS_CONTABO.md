@@ -1,6 +1,5 @@
 # 🚀 Guia Definitivo de Deploy: VPS Contabo + Docker + Portainer + Cloudflare
-### Sistema: SPM Store - Central Fiscal & Gestão de NFs
-### Domínio: `spmoficial.com.br` (ou `fiscal.spmoficial.com.br`)
+### Domínio Oficial: `https://spmstore.spmoficial.com.br`
 
 ---
 
@@ -152,7 +151,7 @@ services:
       DB_PASSWORD: ${DB_PASSWORD:-spm_fiscal_root_pass_2026!}
       DB_NAME: ${DB_NAME:-spm_fiscal}
       JWT_SECRET: ${JWT_SECRET:-spm_store_ultra_secure_jwt_token_prod_2026_fiscal_elite}
-      APP_URL: ${APP_URL:-https://fiscal.spmoficial.com.br}
+      APP_URL: ${APP_URL:-https://spmstore.spmoficial.com.br}
       TZ: America/Sao_Paulo
     volumes:
       - spm_notas_fiscais:/app/Notas_Fiscais
@@ -186,14 +185,18 @@ Clique em **Deploy the stack**. O Portainer irá inicializar os dois serviços c
 ## ☁️ Passo 4: Configuração Cloudflare (DNS + SSL)
 
 1. Acesse o painel Cloudflare: https://dash.cloudflare.com
-2. Selecione o domínio `spmoficial.com.br`.
-3. Em **DNS > Records**, adicione:
+2. Selecione a zona do seu domínio `spmoficial.com.br`.
+3. Em **DNS > Records**, adicione ou edite o registro:
    - **Tipo**: `A`
-   - **Nome**: `@` (ou `fiscal`)
-   - **IPv4**: `SEU_IP_DA_CONTABO`
-   - **Proxy**: **Proxied (Nuvem Laranja 🟧)**
-4. Em **SSL/TLS > Overview**, selecione: **Full**.
-5. Em **SSL/TLS > Edge Certificates**, ative: **Always Use HTTPS**.
+   - **Nome (Name)**: `spmstore`
+   - **IPv4 address**: `SEU_IP_DA_CONTABO`
+   - **Proxy status**: **Proxied (Nuvem Laranja 🟧)** para SSL automático e proteção Cloudflare
+   - **TTL**: Auto
+4. Em **SSL/TLS > Overview**, certifique-se de que está em: **Full** (ou **Flexible** se não houver SSL local na VPS).
+5. Em **SSL/TLS > Edge Certificates**, ative:
+   - **Always Use HTTPS**: Ativado (redireciona automaticamente HTTP para HTTPS).
+   - **Automatic HTTPS Rewrites**: Ativado.
+6. URL de Acesso Final: **`https://spmstore.spmoficial.com.br`**
 
 ---
 

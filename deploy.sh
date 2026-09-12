@@ -3,7 +3,7 @@
 # ==============================================================================
 # SCRIPT DE DEPLOY AUTOMATIZADO - SPM STORE SISTEMA FISCAL
 # VPS Contabo / Ubuntu 20.04 - 24.04 / Docker / Portainer / Cloudflare
-# Domínio: spmoficial.com.br
+# Domínio: spmstore.spmoficial.com.br
 # ==============================================================================
 
 set -e
@@ -16,7 +16,7 @@ NC='\033[0m' # No Color
 
 echo -e "${CYAN}==============================================================================${NC}"
 echo -e "${CYAN}   🚀 INICIANDO DEPLOY AUTOMATIZADO - SPM STORE SISTEMA FISCAL               ${NC}"
-echo -e "${CYAN}   VPS Contabo | Docker | Portainer | Cloudflare | spmoficial.com.br        ${NC}"
+echo -e "${CYAN}   VPS Contabo | Docker | Portainer | spmstore.spmoficial.com.br             ${NC}"
 echo -e "${CYAN}==============================================================================${NC}"
 echo ""
 
@@ -113,9 +113,10 @@ echo -e "${CYAN}📌 Próximos Passos no Cloudflare:${NC}"
 echo -e "   1. Acesse o painel da Cloudflare em https://dash.cloudflare.com"
 echo -e "   2. Selecione o domínio ${YELLOW}spmoficial.com.br${NC}"
 echo -e "   3. Em ${YELLOW}DNS > Records${NC}, crie um apontamento Tipo ${YELLOW}A${NC}:"
-echo -e "      • Name: ${YELLOW}@${NC} (ou ${YELLOW}fiscal${NC})"
+echo -e "      • Name: ${YELLOW}spmstore${NC}"
 echo -e "      • IPv4 address: ${YELLOW}$(curl -s ifconfig.me)${NC}"
 echo -e "      • Proxy status: ${YELLOW}Proxied (Nuvem Laranja)${NC}"
-echo -e "   4. Em ${YELLOW}SSL/TLS${NC}, selecione o modo ${YELLOW}Full${NC} ou ${YELLOW}Flexible${NC}."
+echo -e "   4. Em ${YELLOW}SSL/TLS${NC}, selecione o modo ${YELLOW}Full${NC}."
+echo -e "   5. Acesse: ${YELLOW}https://spmstore.spmoficial.com.br${NC}"
 echo ""
 echo -e "${GREEN}Sistema pronto e operacional na sua VPS Contabo! 🚀${NC}"
