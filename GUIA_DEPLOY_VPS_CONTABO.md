@@ -176,16 +176,18 @@ networks:
 
 ---
 
-## ☁️ Passo 4: DNS no Cloudflare
+## ☁️ Passo 4: DNS no Cloudflare (Padrão CNAME como MinIO, n8n, Typebot)
 
 No painel do Cloudflare (domínio `spmoficial.com.br`):
 1. Vá em **DNS > Records**:
-   * **Tipo**: `A`
-   * **Nome**: `spmstore`
-   * **IPv4 address**: O IP da sua VPS Contabo.
+   * **Tipo**: `CNAME`
+   * **Nome (Name)**: `spmstore`
+   * **Target (Destino)**: `spmoficial.com.br` (ou o mesmo domínio base apontado para o seu Traefik)
    * **Proxy status**: **Proxied (Nuvem Laranja 🟧)**
+   * **TTL**: Auto
 2. Em **SSL/TLS**:
    * Certifique-se de que está em **Full** (ou **Flexible**).
+3. O Traefik na rede `OnlineNet` receberá a requisição para `spmstore.spmoficial.com.br` e direcionará automaticamente para a porta `3000` do container `spm-fiscal`!
 
 ---
 
