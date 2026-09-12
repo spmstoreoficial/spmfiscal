@@ -9,3 +9,8 @@ npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
 .DS_Store
+*.bat
+*.ps1
+*.code-workspace
+*.tar.gz
+metadata.json

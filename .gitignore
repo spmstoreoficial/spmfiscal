@@ -1,7 +1,25 @@
+# Dependências e caches
 node_modules/
 build/
 coverage/
 .DS_Store
 *.log
-.env*
+
+# Arquivos de ambiente local (manter apenas .env.example)
+.env
+.env.local
+.env.*
 !.env.example
+
+# Scripts locais Windows / Editores
+*.bat
+*.ps1
+*.code-workspace
+metadata.json
+
+# Arquivos compactados de backup local
+*.tar.gz
+*.zip
+
+# Sourcemaps pesados de compilação
+dist/*.map
